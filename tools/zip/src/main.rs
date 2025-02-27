@@ -3,9 +3,12 @@ use clap::Parser;
 use glob::Pattern;
 use log::{error, info, warn, LevelFilter};
 use path_clean::clean;
+use std::env;
 use std::fs::File;
 use std::io::{self, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use walkdir::WalkDir;
 
 /// 快速的文件压缩工具 (A fast compression tool)
@@ -195,23 +198,174 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
     Ok(())
 }
 
+fn remove_ziper() -> Result<()> {
+    // 获取 HOME 目录
+    let home = env::var("HOME").context("无法获取 HOME 目录")?;
+    let ziper_dir = format!("{}/.ziper", home);
+
+    // 删除 ziper 目录
+    if Path::new(&ziper_dir).exists() {
+        std::fs::remove_dir_all(&ziper_dir).context("删除 ziper 目录失败")?;
+        info!("已删除 ziper 目录");
+    }
+
+    // 获取当前用户的 shell
+    let shell = env::var("SHELL").unwrap_or_else(|_| String::from("/bin/bash"));
+    let shell_name = Path::new(&shell)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    // 确定配置文件路径
+    let rc_file = match shell_name.as_ref() {
+        "zsh" => format!("{}/.zshrc", home),
+        "bash" => format!("{}/.bashrc", home),
+        _ => format!("{}/.profile", home),
+    };
+
+    // 如果配置文件存在，清理 ziper 相关配置
+    if Path::new(&rc_file).exists() {
+        // 使用 sed 删除 ziper 相关配置
+        let status = Command::new("sed")
+            .arg("-i.bak")
+            .arg("-e")
+            .arg("/# ziper/d")
+            .arg("-e")
+            .arg("/\\.ziper\\/ziper\\.sh/d")
+            .arg(&rc_file)
+            .status()
+            .context("执行 sed 命令失败")?;
+
+        if status.success() {
+            // 删除备份文件
+            let _ = std::fs::remove_file(format!("{}.bak", rc_file));
+            info!("已清理 shell 配置");
+        }
+    }
+
+    info!("Ziper 已成功卸载，请重新打开终端或执行 'source ~/.zshrc' 使配置生效");
+    Ok(())
+}
+
+fn get_latest_version() -> Result<String> {
+    let output = Command::new("curl")
+        .arg("-s")
+        .arg("https://api.github.com/repos/jwyGithub/development-tools/releases/latest")
+        .output()
+        .context("获取最新版本信息失败")?;
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    if let Some(version) = output_str.split('"').find(|s| s.starts_with('v')) {
+        Ok(version.to_string())
+    } else {
+        Ok("v0.1.0".to_string())
+    }
+}
+
+fn get_current_version() -> Result<String> {
+    let home = env::var("HOME").context("无法获取 HOME 目录")?;
+    let ziper_path = format!("{}/.ziper/bin/ziper", home);
+
+    if !Path::new(&ziper_path).exists() {
+        return Ok("未安装".to_string());
+    }
+
+    let output = Command::new(&ziper_path)
+        .arg("--version")
+        .output()
+        .context("获取当前版本失败")?;
+
+    let version = String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("未知")
+        .to_string();
+
+    Ok(version)
+}
+
+fn upgrade_ziper() -> Result<()> {
+    let current_version = get_current_version()?;
+    let latest_version = get_latest_version()?;
+
+    if current_version == latest_version {
+        info!("已经是最新版本 ({})", latest_version);
+        return Ok(());
+    }
+
+    // 获取系统信息
+    let os = if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        return Err(anyhow::anyhow!("不支持的操作系统"));
+    };
+
+    let arch = if cfg!(target_arch = "x86_64") {
+        "amd64"
+    } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        return Err(anyhow::anyhow!("不支持的系统架构"));
+    };
+
+    // 构建下载 URL
+    let binary_name = format!("ziper-{}-{}", os, arch);
+    let download_url = format!(
+        "https://github.com/jwyGithub/development-tools/releases/download/{}/{}",
+        latest_version, binary_name
+    );
+
+    info!("正在下载 Ziper {} ({}-{})...", latest_version, os, arch);
+
+    // 创建临时目录
+    let tmp_dir = std::env::temp_dir().join("ziper-upgrade");
+    std::fs::create_dir_all(&tmp_dir).context("创建临时目录失败")?;
+    let tmp_file = tmp_dir.join("ziper");
+
+    // 下载新版本
+    let status = Command::new("curl")
+        .arg("-sSL")
+        .arg(&download_url)
+        .arg("-o")
+        .arg(&tmp_file)
+        .status()
+        .context("下载失败")?;
+
+    if !status.success() {
+        return Err(anyhow::anyhow!("下载失败"));
+    }
+
+    // 添加执行权限
+    std::fs::set_permissions(&tmp_file, std::fs::Permissions::from_mode(0o755))
+        .context("设置执行权限失败")?;
+
+    // 获取安装目录
+    let home = env::var("HOME").context("无法获取 HOME 目录")?;
+    let install_dir = format!("{}/.ziper/bin", home);
+    let install_path = format!("{}/ziper", install_dir);
+
+    // 移动文件到安装目录
+    std::fs::rename(&tmp_file, &install_path).context("安装失败")?;
+
+    // 清理临时目录
+    std::fs::remove_dir_all(&tmp_dir).ok();
+
+    info!("Ziper 已成功升级到 {}", latest_version);
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     setup_logger(cli.quiet, cli.verbose);
 
-    // 处理升级和卸载命令
     if cli.upgrade {
-        info!("请使用安装脚本进行升级：");
-        info!("Unix系统：curl -sSL https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.sh | bash -- --upgrade");
-        info!("Windows系统：irm https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.ps1 | iex -upgrade");
-        return Ok(());
+        return upgrade_ziper();
     }
 
     if cli.remove {
-        info!("请使用安装脚本进行卸载：");
-        info!("Unix系统：curl -sSL https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.sh | bash -- --remove");
-        info!("Windows系统：irm https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.ps1 | iex -remove");
-        return Ok(());
+        return remove_ziper();
     }
 
     // 检查是否提供了源路径
