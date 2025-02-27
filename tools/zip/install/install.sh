@@ -122,51 +122,36 @@ install_or_upgrade() {
     chmod +x ziper
     
     # 确定安装目录
-    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-        echo "使用 sudo 安装到系统目录..."
-        sudo mv ziper /usr/local/bin/
-        INSTALL_PATH="/usr/local/bin/ziper"
+    INSTALL_DIR="$HOME/.ziper"
+    mkdir -p "$INSTALL_DIR/bin"
+    mv ziper "$INSTALL_DIR/bin/"
+    INSTALL_PATH="$INSTALL_DIR/bin/ziper"
+    
+    # 创建环境加载脚本
+    cat > "$INSTALL_DIR/ziper.sh" << 'EOF'
+# ziper
+export ZIPER_DIR="$HOME/.ziper"
+export PATH="$ZIPER_DIR/bin:$PATH"
+EOF
+    
+    # 获取对应的 shell 配置文件
+    SHELL_RC=$(get_shell_rc)
+    
+    if [ -n "$SHELL_RC" ]; then
+        # 清理旧的配置
+        sed -i.bak -e '/# ziper/d' \
+                  -e '/\.ziper\/ziper\.sh/d' \
+                  "$SHELL_RC"
+        rm -f "${SHELL_RC}.bak"
+        
+        # 添加新的配置
+        echo "[ -s \"\$HOME/.ziper/ziper.sh\" ] && . \"\$HOME/.ziper/ziper.sh\" # ziper" >> "$SHELL_RC"
+        
+        echo "已添加环境配置到 $SHELL_RC（将在下次登录时生效）"
+        echo "要立即生效，请运行: source $SHELL_RC"
     else
-        INSTALL_DIR="/usr/local/bin"
-        if [ -w "$INSTALL_DIR" ]; then
-            mv ziper "$INSTALL_DIR/"
-            INSTALL_PATH="$INSTALL_DIR/ziper"
-        else
-            INSTALL_DIR="$HOME/.local/bin"
-            mkdir -p "$INSTALL_DIR"
-            mv ziper "$INSTALL_DIR/"
-            INSTALL_PATH="$INSTALL_DIR/ziper"
-            
-            if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-                # 获取对应的 shell 配置文件
-                SHELL_RC=$(get_shell_rc)
-                
-                if [ -n "$SHELL_RC" ]; then
-                    # 转义路径中的特殊字符
-                    ESCAPED_INSTALL_DIR=$(echo "$INSTALL_DIR" | sed 's/[\/&]/\\&/g')
-                    
-                    # 检查是否已经存在完全相同的配置
-                    if ! grep -q "^export PATH=\"$ESCAPED_INSTALL_DIR:\\\$PATH\"$" "$SHELL_RC" && \
-                       ! grep -q "^export PATH=$ESCAPED_INSTALL_DIR:\\\$PATH$" "$SHELL_RC" && \
-                       ! grep -q "^PATH=\"$ESCAPED_INSTALL_DIR:\\\$PATH\"$" "$SHELL_RC" && \
-                       ! grep -q "^PATH=$ESCAPED_INSTALL_DIR:\\\$PATH$" "$SHELL_RC"; then
-                        
-                        # 进一步检查是否已包含在其他 PATH 配置中
-                        if ! grep -q "PATH.*$ESCAPED_INSTALL_DIR" "$SHELL_RC"; then
-                            echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$SHELL_RC"
-                            echo "已将 $INSTALL_DIR 添加到 PATH（将在下次登录时生效）"
-                            echo "要立即生效，请运行: source $SHELL_RC"
-                        else
-                            echo "$INSTALL_DIR 已经在 PATH 中配置"
-                        fi
-                    else
-                        echo "$INSTALL_DIR 已经在 PATH 中配置"
-                    fi
-                else
-                    echo "警告：无法确定 shell 配置文件，请手动将 $INSTALL_DIR 添加到 PATH 中"
-                fi
-            fi
-        fi
+        echo "警告：无法确定 shell 配置文件，请手动将以下内容添加到您的 shell 配置文件中："
+        echo "[ -s \"\$HOME/.ziper/ziper.sh\" ] && . \"\$HOME/.ziper/ziper.sh\""
     fi
     
     # 清理临时目录
@@ -182,32 +167,25 @@ install_or_upgrade() {
 
 # 卸载函数
 remove_ziper() {
-    # 查找 ziper 安装位置
-    ZIPER_PATH=$(command -v ziper)
-    
-    if [ -z "$ZIPER_PATH" ]; then
+    # 检查 ziper 目录是否存在
+    if [ ! -d "$HOME/.ziper" ]; then
         echo "未找到 Ziper 安装"
         exit 1
     fi
     
-    echo "找到 Ziper 安装位置: $ZIPER_PATH"
+    echo "找到 Ziper 安装位置: $HOME/.ziper"
     
-    # 删除二进制文件
-    if [ -w "$(dirname "$ZIPER_PATH")" ]; then
-        rm -f "$ZIPER_PATH"
-    else
-        sudo rm -f "$ZIPER_PATH"
-    fi
+    # 删除 ziper 目录
+    rm -rf "$HOME/.ziper"
     
-    # 清理 PATH（如果在 .local/bin）
-    if [[ "$ZIPER_PATH" == "$HOME/.local/bin/ziper" ]]; then
-        # 获取对应的 shell 配置文件
-        SHELL_RC=$(get_shell_rc)
-        if [ -n "$SHELL_RC" ]; then
-            sed -i.bak "/export PATH=\".*\/.local\/bin:\\\$PATH\"/d" "$SHELL_RC"
-            rm -f "${SHELL_RC}.bak"
-            echo "已从 $SHELL_RC 中移除 PATH 配置"
-        fi
+    # 清理配置
+    SHELL_RC=$(get_shell_rc)
+    if [ -n "$SHELL_RC" ]; then
+        sed -i.bak -e '/# ziper/d' \
+                  -e '/\.ziper\/ziper\.sh/d' \
+                  "$SHELL_RC"
+        rm -f "${SHELL_RC}.bak"
+        echo "已从 $SHELL_RC 中移除配置"
     fi
     
     echo "Ziper 已成功卸载"
