@@ -1,5 +1,15 @@
 # Ziper Tool
 
+<div align="center">
+
+![Development Tools](https://img.shields.io/badge/Development-Tools-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+
+[English](README.md) | [简体中文](README-zh.md)
+
+</div>
+
 A fast compression tool written in Rust.
 
 ## Features
@@ -58,6 +68,12 @@ ziper dist -q
 
 # Verbose mode (show detailed output)
 ziper dist -v
+
+# Upgrade to latest version
+ziper --upgrade
+
+# Remove the program
+ziper --remove
 ```
 
 ### Command Line Options
@@ -75,6 +91,8 @@ Options:
   -v, --verbose          Show detailed output
   -h, --help            Print help
   -V, --version         Print version
+  --upgrade            Upgrade to latest version
+  --remove            Remove the program
 ```
 
 ### Ignore Patterns
@@ -110,4 +128,4 @@ cargo test -- --nocapture  # Run tests with output
 ```
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](../../../LICENSE) file for details. 
+This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details. 
