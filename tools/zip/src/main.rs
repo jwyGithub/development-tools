@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
+use anyhow::{Context, Result};
+use clap::Parser;
+use glob::Pattern;
+use log::{error, info, warn, LevelFilter};
+use path_clean::clean;
 use std::fs::File;
 use std::io::{self, Write};
-use anyhow::{Result, Context};
-use clap::Parser;
-use log::{info, warn, error, LevelFilter};
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use glob::Pattern;
-use path_clean::clean;
 
 /// 快速的文件压缩工具 (A fast compression tool)
 #[derive(Parser)]
@@ -87,7 +87,7 @@ fn setup_logger(quiet: bool, verbose: bool) {
 
 fn should_ignore(path: &Path, ignore_patterns: &[Pattern]) -> bool {
     let path_str = path.to_string_lossy();
-    
+
     // 首先检查完整路径
     for pattern in ignore_patterns {
         if pattern.matches(&path_str) {
@@ -104,7 +104,7 @@ fn should_ignore(path: &Path, ignore_patterns: &[Pattern]) -> bool {
             }
         }
     }
-    
+
     false
 }
 
@@ -122,7 +122,7 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
     for entry in walker {
         let entry = entry.context("Failed to read directory entry")?;
         let path = entry.path();
-        
+
         // Skip if path matches any ignore pattern
         if should_ignore(path, ignore_patterns) {
             info!("Ignoring: {}", path.display());
@@ -138,10 +138,7 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
 
         if path.is_file() {
             info!("Adding: {}", relative_path.display());
-            zip.start_file(
-                relative_path.to_string_lossy().into_owned(),
-                options,
-            )?;
+            zip.start_file(relative_path.to_string_lossy().into_owned(), options)?;
             let mut f = File::open(path)?;
             io::copy(&mut f, &mut zip)?;
         } else if !path.is_dir() {
@@ -158,7 +155,8 @@ fn main() -> Result<()> {
     setup_logger(cli.quiet, cli.verbose);
 
     // Convert ignore patterns to glob patterns
-    let ignore_patterns: Vec<Pattern> = cli.ignore_patterns
+    let ignore_patterns: Vec<Pattern> = cli
+        .ignore_patterns
         .unwrap_or_default()
         .iter()
         .map(|p| Pattern::new(p))
