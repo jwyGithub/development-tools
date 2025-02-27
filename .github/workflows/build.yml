@@ -7,6 +7,9 @@ on:
             - README.md
             - '**/*.md'
             - LICENSE
+            - '**/*.sh'
+            - '**/*.bat'
+            - '**/*.ps1'
         branches:
             - main
     pull_request:
@@ -15,6 +18,9 @@ on:
             - README.md
             - '**/*.md'
             - LICENSE
+            - '**/*.sh'
+            - '**/*.bat'
+            - '**/*.ps1'
 
 jobs:
     build:

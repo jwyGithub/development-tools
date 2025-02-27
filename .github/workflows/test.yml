@@ -7,12 +7,18 @@ on:
             - README.md
             - '**/*.md'
             - LICENSE
+            - '**/*.sh'
+            - '**/*.bat'
+            - '**/*.ps1'
     pull_request:
         paths-ignore:
             # 忽略文档文件
             - README.md
             - '**/*.md'
             - LICENSE
+            - '**/*.sh'
+            - '**/*.bat'
+            - '**/*.ps1'
 
 jobs:
     test:

@@ -9,6 +9,9 @@ on:
             - README.md
             - '**/*.md'
             - LICENSE
+            - '**/*.sh'
+            - '**/*.bat'
+            - '**/*.ps1'
 
 jobs:
     create-release:

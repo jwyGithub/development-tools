@@ -40,6 +40,42 @@ get_latest_version() {
     echo "$VERSION"
 }
 
+# 获取用户的默认 shell 配置文件
+get_shell_rc() {
+    # 检测当前 shell
+    local current_shell
+    if [ -n "$ZSH_VERSION" ]; then
+        current_shell="zsh"
+    elif [ -n "$BASH_VERSION" ]; then
+        current_shell="bash"
+    else
+        # 尝试从 /etc/passwd 获取默认 shell
+        current_shell=$(basename "$(grep "^$USER:" /etc/passwd | cut -d: -f7)")
+    fi
+
+    # 根据 shell 类型返回对应的配置文件
+    case "$current_shell" in
+        "zsh")
+            if [ -f "$HOME/.zshrc" ]; then
+                echo "$HOME/.zshrc"
+            else
+                echo "$HOME/.zprofile"
+            fi
+            ;;
+        "bash")
+            if [ -f "$HOME/.bashrc" ]; then
+                echo "$HOME/.bashrc"
+            else
+                echo "$HOME/.bash_profile"
+            fi
+            ;;
+        *)
+            # 如果无法确定 shell 类型，返回空
+            echo ""
+            ;;
+    esac
+}
+
 # 下载并安装
 install_or_upgrade() {
     local FORCE=$1
@@ -88,17 +124,15 @@ install_or_upgrade() {
             INSTALL_PATH="$INSTALL_DIR/ziper"
             
             if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-                SHELL_RC=""
-                if [ -n "$ZSH_VERSION" ]; then
-                    SHELL_RC="$HOME/.zshrc"
-                elif [ -n "$BASH_VERSION" ]; then
-                    SHELL_RC="$HOME/.bashrc"
-                fi
+                # 获取对应的 shell 配置文件
+                SHELL_RC=$(get_shell_rc)
                 
                 if [ -n "$SHELL_RC" ]; then
                     echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$SHELL_RC"
                     echo "已将 $INSTALL_DIR 添加到 PATH（将在下次登录时生效）"
                     echo "要立即生效，请运行: source $SHELL_RC"
+                else
+                    echo "警告：无法确定 shell 配置文件，请手动将 $INSTALL_DIR 添加到 PATH 中"
                 fi
             fi
         fi
@@ -136,11 +170,13 @@ remove_ziper() {
     
     # 清理 PATH（如果在 .local/bin）
     if [[ "$ZIPER_PATH" == "$HOME/.local/bin/ziper" ]]; then
-        for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-            if [ -f "$rc" ]; then
-                sed -i '/export PATH="$HOME\/.local\/bin:\$PATH"/d' "$rc"
-            fi
-        done
+        # 获取对应的 shell 配置文件
+        SHELL_RC=$(get_shell_rc)
+        if [ -n "$SHELL_RC" ]; then
+            sed -i.bak "/export PATH=\".*\/.local\/bin:\\\$PATH\"/d" "$SHELL_RC"
+            rm -f "${SHELL_RC}.bak"
+            echo "已从 $SHELL_RC 中移除 PATH 配置"
+        fi
     fi
     
     echo "Ziper 已成功卸载"
