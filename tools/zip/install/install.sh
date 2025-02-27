@@ -58,7 +58,6 @@ get_shell_rc() {
     fi
     
     local shell_name=$(basename "$user_shell")
-    echo "检测用户默认 shell: $shell_name" >&2
     
     case "$shell_name" in
         "zsh")
@@ -147,7 +146,6 @@ EOF
         # 添加新的配置
         echo "[ -s \"\$HOME/.ziper/ziper.sh\" ] && . \"\$HOME/.ziper/ziper.sh\" # ziper" >> "$SHELL_RC"
         
-        echo "已添加环境配置到 $SHELL_RC（将在下次登录时生效）"
         echo "要立即生效，请运行: source $SHELL_RC"
     else
         echo "警告：无法确定 shell 配置文件，请手动将以下内容添加到您的 shell 配置文件中："
