@@ -118,31 +118,59 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
     let source_path = clean(source);
     let source_name = source_path.file_name().unwrap_or_default();
 
-    let walker = WalkDir::new(&source_path).follow_links(true);
+    // 使用 WalkDir 的配置选项来更好地处理错误
+    let walker = WalkDir::new(&source_path)
+        .follow_links(false) // 不跟随符号链接
+        .same_file_system(true) // 保持在同一个文件系统内
+        .contents_first(false); // 目录优先
+
     for entry in walker {
-        let entry = entry.context("Failed to read directory entry")?;
-        let path = entry.path();
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
 
-        // Skip if path matches any ignore pattern
-        if should_ignore(path, ignore_patterns) {
-            info!("Ignoring: {}", path.display());
-            continue;
-        }
+                // Skip if path matches any ignore pattern
+                if should_ignore(path, ignore_patterns) {
+                    info!("Ignoring: {}", path.display());
+                    continue;
+                }
 
-        let relative_path = if path == source_path {
-            PathBuf::from(source_name)
-        } else {
-            let stripped_path = path.strip_prefix(&source_path)?;
-            PathBuf::from(source_name).join(stripped_path)
-        };
+                let relative_path = if path == source_path {
+                    PathBuf::from(source_name)
+                } else {
+                    let stripped_path = path.strip_prefix(&source_path)?;
+                    PathBuf::from(source_name).join(stripped_path)
+                };
 
-        if path.is_file() {
-            info!("Adding: {}", relative_path.display());
-            zip.start_file(relative_path.to_string_lossy().into_owned(), options)?;
-            let mut f = File::open(path)?;
-            io::copy(&mut f, &mut zip)?;
-        } else if !path.is_dir() {
-            warn!("Skipping non-regular file: {}", path.display());
+                if path.is_file() {
+                    match File::open(path) {
+                        Ok(mut f) => {
+                            info!("Adding: {}", relative_path.display());
+                            if let Err(e) = zip
+                                .start_file(relative_path.to_string_lossy().into_owned(), options)
+                            {
+                                warn!("Failed to add file {}: {}", path.display(), e);
+                                continue;
+                            }
+                            if let Err(e) = io::copy(&mut f, &mut zip) {
+                                warn!("Failed to copy file {}: {}", path.display(), e);
+                                continue;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to open file {}: {}", path.display(), e);
+                            continue;
+                        }
+                    }
+                } else if !path.is_dir() {
+                    warn!("Skipping non-regular file: {}", path.display());
+                }
+            }
+            Err(e) => {
+                // 只是警告而不是中断整个过程
+                warn!("Failed to access path: {}", e);
+                continue;
+            }
         }
     }
 
