@@ -43,35 +43,35 @@ get_latest_version() {
 # 获取用户的默认 shell 配置文件
 get_shell_rc() {
     # 检测当前 shell
-    local current_shell
-    if [ -n "$ZSH_VERSION" ]; then
-        current_shell="zsh"
-    elif [ -n "$BASH_VERSION" ]; then
-        current_shell="bash"
-    else
-        # 尝试从 /etc/passwd 获取默认 shell
-        current_shell=$(basename "$(grep "^$USER:" /etc/passwd | cut -d: -f7)")
-    fi
-
-    # 根据 shell 类型返回对应的配置文件
-    case "$current_shell" in
+    local shell_path="$SHELL"
+    local shell_name=$(basename "$shell_path")
+    
+    case "$shell_name" in
         "zsh")
+            # 按优先级检查 zsh 配置文件
             if [ -f "$HOME/.zshrc" ]; then
                 echo "$HOME/.zshrc"
-            else
+            elif [ -f "$HOME/.zprofile" ]; then
                 echo "$HOME/.zprofile"
+            elif [ -f "$HOME/.zshenv" ]; then
+                echo "$HOME/.zshenv"
+            else
+                echo "$HOME/.profile"
             fi
             ;;
         "bash")
+            # 按优先级检查 bash 配置文件
             if [ -f "$HOME/.bashrc" ]; then
                 echo "$HOME/.bashrc"
-            else
+            elif [ -f "$HOME/.bash_profile" ]; then
                 echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.profile"
             fi
             ;;
         *)
-            # 如果无法确定 shell 类型，返回空
-            echo ""
+            # 如果是其他 shell，使用通用的 .profile
+            echo "$HOME/.profile"
             ;;
     esac
 }
