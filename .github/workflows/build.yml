@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -52,7 +52,7 @@ jobs:
         shell: bash
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ziper-${{ matrix.os }}-${{ matrix.arch }}
           path: tools/zip/target/release/ziper-*
