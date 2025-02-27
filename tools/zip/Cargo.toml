@@ -1,0 +1,29 @@
+[package]
+name = "ziper"
+version = "0.1.0"
+edition = "2021"
+authors = ["Yuki <jiangweiye@outlook.com>"]
+description = "A fast compression tool written in Rust"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.5.1", features = ["derive"] }  # Command line argument parsing
+zip = "0.6.6"                                        # Zip compression/decompression
+anyhow = "1.0.79"                                   # Error handling
+log = "0.4.20"                                      # Logging
+env_logger = "0.11.1"                               # Logging implementation
+walkdir = "2.4.0"                                   # Directory traversal
+glob = "0.3.1"                                      # Glob pattern matching
+path-clean = "1.0.1"                                # Path normalization
+
+[dev-dependencies]
+assert_fs = "1.1.1"                                 # File system assertions for tests
+predicates = "3.1.0"                                # Test predicates
+tempfile = "3.10.0"                                 # Temporary files for tests
+
+[profile.release]
+opt-level = 3                                       # Maximum optimization
+lto = true                                          # Link time optimization
+codegen-units = 1                                   # Maximum size optimization
+panic = 'abort'                                     # Remove panic unwinding
+strip = true                                        # Strip symbols from binary
