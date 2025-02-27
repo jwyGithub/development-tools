@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - 'tools/zip/**'
+      - '.github/workflows/**'
     branches:
       - main
   pull_request:
     paths:
       - 'tools/zip/**'
+      - '.github/workflows/**'
 
 jobs:
   build:
@@ -33,6 +35,9 @@ jobs:
           toolchain: stable
           target: ${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
           override: true
+      
+      - name: Install target
+        run: rustup target add ${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
       
       - name: Build
         working-directory: tools/zip

@@ -47,6 +47,9 @@ jobs:
           target: ${{ matrix.target }}
           override: true
       
+      - name: Install target
+        run: rustup target add ${{ matrix.target }}
+      
       - name: Build Release Binary
         working-directory: tools/zip
         run: cargo build --release --target ${{ matrix.target }}
