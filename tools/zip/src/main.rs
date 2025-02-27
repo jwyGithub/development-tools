@@ -38,10 +38,17 @@ use walkdir::WalkDir;
 
     # 详细输出模式 (Verbose mode)
     {bin} dist -v
+
+    # 升级到最新版本 (Upgrade to latest version)
+    {bin} --upgrade
+
+    # 卸载程序 (Remove the program)
+    {bin} --remove
 ")]
 struct Cli {
     /// 要压缩的源文件或目录 (Source directory or file to compress)
-    source: String,
+    #[arg(default_value = None)]
+    source: Option<String>,
 
     /// 输出的zip文件路径（可选，默认为源名称加.zip后缀）
     /// (Output zip file path - optional, defaults to source name with .zip extension)
@@ -62,6 +69,16 @@ struct Cli {
     /// (Verbose mode - show detailed output)
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
+
+    /// 升级到最新版本
+    /// (Upgrade to latest version)
+    #[arg(long = "upgrade")]
+    upgrade: bool,
+
+    /// 卸载程序
+    /// (Remove the program)
+    #[arg(long = "remove")]
+    remove: bool,
 }
 
 fn setup_logger(quiet: bool, verbose: bool) {
@@ -182,6 +199,29 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     setup_logger(cli.quiet, cli.verbose);
 
+    // 处理升级和卸载命令
+    if cli.upgrade {
+        info!("请使用安装脚本进行升级：");
+        info!("Unix系统：curl -sSL https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.sh | bash -- --upgrade");
+        info!("Windows系统：irm https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.ps1 | iex -upgrade");
+        return Ok(());
+    }
+
+    if cli.remove {
+        info!("请使用安装脚本进行卸载：");
+        info!("Unix系统：curl -sSL https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.sh | bash -- --remove");
+        info!("Windows系统：irm https://raw.githubusercontent.com/jwyGithub/development-tools/main/tools/zip/install/install.ps1 | iex -remove");
+        return Ok(());
+    }
+
+    // 检查是否提供了源路径
+    let source = if let Some(source) = cli.source {
+        source
+    } else {
+        error!("请指定要压缩的源文件或目录");
+        std::process::exit(1);
+    };
+
     // Convert ignore patterns to glob patterns
     let ignore_patterns: Vec<Pattern> = cli
         .ignore_patterns
@@ -191,7 +231,7 @@ fn main() -> Result<()> {
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("Invalid ignore pattern")?;
 
-    let source = Path::new(&cli.source);
+    let source = Path::new(&source);
     if !source.exists() {
         error!("Source path does not exist: {}", source.display());
         std::process::exit(1);
