@@ -42,9 +42,23 @@ get_latest_version() {
 
 # 获取用户的默认 shell 配置文件
 get_shell_rc() {
-    # 检测当前 shell
-    local shell_path="$SHELL"
-    local shell_name=$(basename "$shell_path")
+    # 获取用户的默认 shell
+    local user_shell
+    if [ "$(uname)" = "Darwin" ]; then
+        # macOS
+        user_shell=$(dscl . -read /Users/$USER UserShell | awk '{print $2}')
+    else
+        # Linux 和其他系统
+        user_shell=$(getent passwd $USER | cut -d: -f7)
+    fi
+    
+    # 如果无法获取默认 shell，则使用 $SHELL 环境变量
+    if [ -z "$user_shell" ]; then
+        user_shell="$SHELL"
+    fi
+    
+    local shell_name=$(basename "$user_shell")
+    echo "检测用户默认 shell: $shell_name" >&2
     
     case "$shell_name" in
         "zsh")
