@@ -1,100 +1,106 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+    push:
+        tags:
+            - 'v*'
+        paths-ignore:
+            # 忽略文档文件
+            - README.md
+            - '**/*.md'
+            - LICENSE
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+    create-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        outputs:
+            release_id: ${{ steps.create_release.outputs.id }}
+        steps:
+            - name: Create Release
+              id: create_release
+              uses: softprops/action-gh-release@v2
+              with:
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
 
-  build-and-release:
-    needs: create-release
-    strategy:
-      matrix:
-        include:
-          # Linux builds
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            arch: x86_64
-            binary_suffix: linux-amd64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            arch: aarch64
-            binary_suffix: linux-arm64
-            cross_compile: true
-          
-          # macOS builds
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            arch: x86_64
-            binary_suffix: darwin-amd64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            arch: aarch64
-            binary_suffix: darwin-arm64
-          
-          # Windows builds
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            arch: x86_64
-            binary_suffix: windows-amd64.exe
-          - os: windows-latest
-            target: i686-pc-windows-msvc
-            arch: x86_64
-            binary_suffix: windows-386.exe
-    
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Cross-Compilation Dependencies
-        if: ${{ matrix.cross_compile }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-      
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      
-      - name: Build
-        working-directory: tools/zip
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
-          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
-      
-      - name: Prepare binary
-        shell: bash
-        working-directory: tools/zip
-        run: |
-          mkdir -p target/release
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/ziper.exe target/release/ziper-${{ matrix.binary_suffix }}
-          else
-            cp target/${{ matrix.target }}/release/ziper target/release/ziper-${{ matrix.binary_suffix }}
-          fi
-      
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: tools/zip/target/release/ziper-${{ matrix.binary_suffix }}
+    build-and-release:
+        needs: create-release
+        strategy:
+            matrix:
+                include:
+                    # Linux builds
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      arch: x86_64
+                      binary_suffix: linux-amd64
+                    - os: ubuntu-latest
+                      target: aarch64-unknown-linux-gnu
+                      arch: aarch64
+                      binary_suffix: linux-arm64
+                      cross_compile: true
+
+                    # macOS builds
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      arch: x86_64
+                      binary_suffix: darwin-amd64
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      arch: aarch64
+                      binary_suffix: darwin-arm64
+
+                    # Windows builds
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      arch: x86_64
+                      binary_suffix: windows-amd64.exe
+                    - os: windows-latest
+                      target: i686-pc-windows-msvc
+                      arch: x86_64
+                      binary_suffix: windows-386.exe
+
+        runs-on: ${{ matrix.os }}
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Cross-Compilation Dependencies
+              if: ${{ matrix.cross_compile }}
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.target }}
+
+            - name: Build
+              working-directory: tools/zip
+              run: cargo build --release --target ${{ matrix.target }}
+              env:
+                  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+                  CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+                  CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+
+            - name: Prepare binary
+              shell: bash
+              working-directory: tools/zip
+              run: |
+                  mkdir -p target/release
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    cp target/${{ matrix.target }}/release/ziper.exe target/release/ziper-${{ matrix.binary_suffix }}
+                  else
+                    cp target/${{ matrix.target }}/release/ziper target/release/ziper-${{ matrix.binary_suffix }}
+                  fi
+
+            - name: Upload Release Asset
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: tools/zip/target/release/ziper-${{ matrix.binary_suffix }}
+
