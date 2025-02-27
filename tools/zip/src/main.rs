@@ -115,7 +115,7 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
 
-    let source_path = clean(source.to_path_buf());
+    let source_path = clean(source);
     let source_name = source_path.file_name().unwrap_or_default();
 
     let walker = WalkDir::new(&source_path).follow_links(true);
