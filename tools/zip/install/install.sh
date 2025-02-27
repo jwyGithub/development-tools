@@ -142,9 +142,15 @@ install_or_upgrade() {
                 SHELL_RC=$(get_shell_rc)
                 
                 if [ -n "$SHELL_RC" ]; then
-                    echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$SHELL_RC"
-                    echo "已将 $INSTALL_DIR 添加到 PATH（将在下次登录时生效）"
-                    echo "要立即生效，请运行: source $SHELL_RC"
+                    # 检查是否已经存在相同的配置
+                    if ! grep -q "export.*PATH.*$INSTALL_DIR" "$SHELL_RC" && \
+                       ! grep -q "PATH.*$INSTALL_DIR" "$SHELL_RC"; then
+                        echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$SHELL_RC"
+                        echo "已将 $INSTALL_DIR 添加到 PATH（将在下次登录时生效）"
+                        echo "要立即生效，请运行: source $SHELL_RC"
+                    else
+                        echo "$INSTALL_DIR 已经在 PATH 中配置"
+                    fi
                 else
                     echo "警告：无法确定 shell 配置文件，请手动将 $INSTALL_DIR 添加到 PATH 中"
                 fi
