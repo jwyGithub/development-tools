@@ -275,9 +275,13 @@ fn get_latest_version() -> Result<String> {
 
 fn get_home_dir() -> Result<PathBuf> {
     if cfg!(windows) {
-        env::var("USERPROFILE").map(PathBuf::from).context("无法获取 USERPROFILE 目录")
+        env::var("USERPROFILE")
+            .map(PathBuf::from)
+            .context("无法获取 USERPROFILE 目录")
     } else {
-        env::var("HOME").map(PathBuf::from).context("无法获取 HOME 目录")
+        env::var("HOME")
+            .map(PathBuf::from)
+            .context("无法获取 HOME 目录")
     }
 }
 
@@ -343,7 +347,7 @@ fn upgrade_ziper() -> Result<()> {
     } else {
         format!("ziper-{}-{}", os, arch)
     };
-    
+
     let download_url = format!(
         "https://github.com/jwyGithub/development-tools/releases/download/{}/{}",
         latest_version, binary_name
