@@ -6,6 +6,7 @@ use path_clean::clean;
 use std::env;
 use std::fs::File;
 use std::io::{self, Write};
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -200,50 +201,60 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
 
 fn remove_ziper() -> Result<()> {
     // 获取 HOME 目录
-    let home = env::var("HOME").context("无法获取 HOME 目录")?;
-    let ziper_dir = format!("{}/.ziper", home);
+    let home = get_home_dir()?;
+    let ziper_dir = home.join(".ziper");
 
     // 删除 ziper 目录
-    if Path::new(&ziper_dir).exists() {
+    if ziper_dir.exists() {
         std::fs::remove_dir_all(&ziper_dir).context("删除 ziper 目录失败")?;
         info!("已删除 ziper 目录");
     }
 
-    // 获取当前用户的 shell
-    let shell = env::var("SHELL").unwrap_or_else(|_| String::from("/bin/bash"));
-    let shell_name = Path::new(&shell)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy();
+    // Windows 平台不需要修改 shell 配置
+    #[cfg(unix)]
+    {
+        // 获取当前用户的 shell
+        let shell = env::var("SHELL").unwrap_or_else(|_| String::from("/bin/bash"));
+        let shell_name = Path::new(&shell)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy();
 
-    // 确定配置文件路径
-    let rc_file = match shell_name.as_ref() {
-        "zsh" => format!("{}/.zshrc", home),
-        "bash" => format!("{}/.bashrc", home),
-        _ => format!("{}/.profile", home),
-    };
+        // 确定配置文件路径
+        let rc_file = match shell_name.as_ref() {
+            "zsh" => home.join(".zshrc"),
+            "bash" => home.join(".bashrc"),
+            _ => home.join(".profile"),
+        };
 
-    // 如果配置文件存在，清理 ziper 相关配置
-    if Path::new(&rc_file).exists() {
-        // 使用 sed 删除 ziper 相关配置
-        let status = Command::new("sed")
-            .arg("-i.bak")
-            .arg("-e")
-            .arg("/# ziper/d")
-            .arg("-e")
-            .arg("/\\.ziper\\/ziper\\.sh/d")
-            .arg(&rc_file)
-            .status()
-            .context("执行 sed 命令失败")?;
+        // 如果配置文件存在，清理 ziper 相关配置
+        if rc_file.exists() {
+            // 使用 sed 删除 ziper 相关配置
+            let status = Command::new("sed")
+                .arg("-i.bak")
+                .arg("-e")
+                .arg("/# ziper/d")
+                .arg("-e")
+                .arg("/\\.ziper\\/ziper\\.sh/d")
+                .arg(&rc_file)
+                .status()
+                .context("执行 sed 命令失败")?;
 
-        if status.success() {
-            // 删除备份文件
-            let _ = std::fs::remove_file(format!("{}.bak", rc_file));
-            info!("已清理 shell 配置");
+            if status.success() {
+                // 删除备份文件
+                let _ = std::fs::remove_file(rc_file.with_extension("bak"));
+                info!("已清理 shell 配置");
+            }
         }
+
+        info!("Ziper 已成功卸载，请重新打开终端或执行 'source ~/.zshrc' 使配置生效");
     }
 
-    info!("Ziper 已成功卸载，请重新打开终端或执行 'source ~/.zshrc' 使配置生效");
+    #[cfg(windows)]
+    {
+        info!("Ziper 已成功卸载");
+    }
+
     Ok(())
 }
 
@@ -262,15 +273,27 @@ fn get_latest_version() -> Result<String> {
     }
 }
 
-fn get_current_version() -> Result<String> {
-    let home = env::var("HOME").context("无法获取 HOME 目录")?;
-    let ziper_path = format!("{}/.ziper/bin/ziper", home);
+fn get_home_dir() -> Result<PathBuf> {
+    if cfg!(windows) {
+        env::var("USERPROFILE").map(PathBuf::from).context("无法获取 USERPROFILE 目录")
+    } else {
+        env::var("HOME").map(PathBuf::from).context("无法获取 HOME 目录")
+    }
+}
 
-    if !Path::new(&ziper_path).exists() {
+fn get_current_version() -> Result<String> {
+    let home = get_home_dir()?;
+    let ziper_path = if cfg!(windows) {
+        home.join(".ziper").join("bin").join("ziper.exe")
+    } else {
+        home.join(".ziper").join("bin").join("ziper")
+    };
+
+    if !ziper_path.exists() {
         return Ok("未安装".to_string());
     }
 
-    let output = Command::new(&ziper_path)
+    let output = Command::new(ziper_path)
         .arg("--version")
         .output()
         .context("获取当前版本失败")?;
@@ -298,6 +321,8 @@ fn upgrade_ziper() -> Result<()> {
         "darwin"
     } else if cfg!(target_os = "linux") {
         "linux"
+    } else if cfg!(target_os = "windows") {
+        "windows"
     } else {
         return Err(anyhow::anyhow!("不支持的操作系统"));
     };
@@ -306,12 +331,19 @@ fn upgrade_ziper() -> Result<()> {
         "amd64"
     } else if cfg!(target_arch = "aarch64") {
         "arm64"
+    } else if cfg!(target_arch = "x86") {
+        "386"
     } else {
         return Err(anyhow::anyhow!("不支持的系统架构"));
     };
 
     // 构建下载 URL
-    let binary_name = format!("ziper-{}-{}", os, arch);
+    let binary_name = if cfg!(windows) {
+        format!("ziper-{}-{}.exe", os, arch)
+    } else {
+        format!("ziper-{}-{}", os, arch)
+    };
+    
     let download_url = format!(
         "https://github.com/jwyGithub/development-tools/releases/download/{}/{}",
         latest_version, binary_name
@@ -322,7 +354,11 @@ fn upgrade_ziper() -> Result<()> {
     // 创建临时目录
     let tmp_dir = std::env::temp_dir().join("ziper-upgrade");
     std::fs::create_dir_all(&tmp_dir).context("创建临时目录失败")?;
-    let tmp_file = tmp_dir.join("ziper");
+    let tmp_file = if cfg!(windows) {
+        tmp_dir.join("ziper.exe")
+    } else {
+        tmp_dir.join("ziper")
+    };
 
     // 下载新版本
     let status = Command::new("curl")
@@ -337,14 +373,22 @@ fn upgrade_ziper() -> Result<()> {
         return Err(anyhow::anyhow!("下载失败"));
     }
 
-    // 添加执行权限
+    // 设置执行权限（仅 Unix 系统）
+    #[cfg(unix)]
     std::fs::set_permissions(&tmp_file, std::fs::Permissions::from_mode(0o755))
         .context("设置执行权限失败")?;
 
     // 获取安装目录
-    let home = env::var("HOME").context("无法获取 HOME 目录")?;
-    let install_dir = format!("{}/.ziper/bin", home);
-    let install_path = format!("{}/ziper", install_dir);
+    let home = get_home_dir()?;
+    let install_dir = home.join(".ziper").join("bin");
+    let install_path = if cfg!(windows) {
+        install_dir.join("ziper.exe")
+    } else {
+        install_dir.join("ziper")
+    };
+
+    // 创建安装目录
+    std::fs::create_dir_all(&install_dir).context("创建安装目录失败")?;
 
     // 移动文件到安装目录
     std::fs::rename(&tmp_file, &install_path).context("安装失败")?;
