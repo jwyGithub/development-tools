@@ -35,7 +35,7 @@ jobs:
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
                   echo "Version: $VERSION"
 
-    build:
+    build-unix:
         needs: get-project
         strategy:
             fail-fast: false
@@ -45,22 +45,15 @@ jobs:
                     - target: x86_64-unknown-linux-gnu
                     # Linux ARM64
                     - target: aarch64-unknown-linux-gnu
-                    # Windows x64
-                    - target: x86_64-pc-windows-msvc
-                    # Windows ARM64
-                    - target: aarch64-pc-windows-msvc
-                    # macOS x64
-                    - target: x86_64-apple-darwin
-                    # macOS ARM64
-                    - target: aarch64-apple-darwin
 
         runs-on: ubuntu-latest
-        
         steps:
             - uses: actions/checkout@v4
 
             - name: Setup Rust toolchain
               uses: dtolnay/rust-toolchain@stable
+              with:
+                target: ${{ matrix.target }}
 
             - name: Install cross
               run: cargo install cross --git https://github.com/cross-rs/cross
@@ -72,55 +65,116 @@ jobs:
                   PROJECT=${{ needs.get-project.outputs.project }}
                   VERSION=${{ needs.get-project.outputs.version }}
                   
-                  echo "Current directory: $(pwd)"
-                  echo "Project: $PROJECT"
-                  echo "Version: $VERSION"
-                  
-                  # 检查项目目录
-                  if [ ! -d "package/$PROJECT" ]; then
-                    echo "Error: Project directory package/$PROJECT does not exist"
-                    ls -la package/
-                    exit 1
-                  fi
-                  
                   cd package/$PROJECT
-                  echo "Changed to directory: $(pwd)"
                   
-                  # 获取 Cargo.toml 中的项目名称
+                  # 获取二进制名称
                   BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
-                  echo "Binary name from Cargo.toml: $BINARY_NAME"
                   echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
                   
                   # 设置输出文件名
-                  if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
-                    OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
-                  else
-                    OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
-                  fi
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
                   
-                  echo "Output name: $OUTPUT_NAME"
-                  
-                  # 使用 cross 进行构建
-                  if [[ "${{ matrix.target }}" == *"-windows-"* ]] || [[ "${{ matrix.target }}" == *"-apple-"* ]]; then
-                    echo "Skipping cross build for Windows/macOS target: ${{ matrix.target }}"
-                    cargo build --release --target ${{ matrix.target }}
-                  else
-                    echo "Using cross for target: ${{ matrix.target }}"
-                    cross build --target ${{ matrix.target }} --release
-                  fi
-                  
-                  # 验证构建结果
-                  if [ $? -ne 0 ]; then
-                    echo "Error: Build failed"
-                    exit 1
-                  fi
+                  # 使用 cross 构建
+                  cross build --target ${{ matrix.target }} --release
                   
                   # 复制构建产物
-                  if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
-                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
-                  else
-                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
-                  fi
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
+
+    build-windows:
+        needs: get-project
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                    - os: windows-latest
+                      target: aarch64-pc-windows-msvc
+
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                target: ${{ matrix.target }}
+
+            - name: Build Release
+              shell: bash
+              id: build
+              run: |
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
+                  
+                  cd package/$PROJECT
+                  
+                  # 获取二进制名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+                  
+                  # 设置输出文件名
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
+                  
+                  # 原生构建
+                  cargo build --target ${{ matrix.target }} --release
+                  
+                  # 复制构建产物
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
+
+    build-macos:
+        needs: get-project
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                target: ${{ matrix.target }}
+
+            - name: Build Release
+              shell: bash
+              id: build
+              run: |
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
+                  
+                  cd package/$PROJECT
+                  
+                  # 获取二进制名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+                  
+                  # 设置输出文件名
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
+                  
+                  # 原生构建
+                  cargo build --target ${{ matrix.target }} --release
+                  
+                  # 复制构建产物
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
@@ -129,7 +183,7 @@ jobs:
                   path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
 
     release:
-        needs: [get-project, build]
+        needs: [get-project, build-unix, build-windows, build-macos]
         runs-on: ubuntu-latest
         permissions:
             contents: write
