@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.1", features = ["derive"] }  # Command line argument parsing
-zip = "0.6.6"                                        # Zip compression/decompression
+zip = "2.2.3"                                        # Zip compression/decompression
 anyhow = "1.0.79"                                   # Error handling
 log = "0.4.20"                                      # Logging
 env_logger = "0.11.1"                               # Logging implementation

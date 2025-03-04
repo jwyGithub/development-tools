@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use zip::write::{ExtendedFileOptions, FileOptions};
 
 /// 快速的文件压缩工具 (A fast compression tool)
 #[derive(Parser)]
@@ -105,9 +106,6 @@ fn should_ignore(path: &Path, ignore_patterns: &[Pattern]) -> bool {
 fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Result<()> {
     let file = File::create(output).context("Failed to create zip file")?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o755);
 
     let source_path = clean(source);
     let source_name = source_path.file_name().unwrap_or_default();
@@ -140,6 +138,9 @@ fn create_zip(source: &Path, output: &Path, ignore_patterns: &[Pattern]) -> Resu
                     match File::open(path) {
                         Ok(mut f) => {
                             info!("Adding: {}", relative_path.display());
+                            let options = FileOptions::<ExtendedFileOptions>::default()
+                                .compression_method(zip::CompressionMethod::Deflated)
+                                .unix_permissions(0o755);
                             if let Err(e) = zip
                                 .start_file(relative_path.to_string_lossy().into_owned(), options)
                             {

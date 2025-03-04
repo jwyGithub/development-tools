@@ -81,6 +81,7 @@ jobs:
 
             - name: Build Release
               shell: bash
+              id: build
               run: |
                   PROJECT=${{ needs.get-project.outputs.project }}
                   VERSION=${{ needs.get-project.outputs.version }}
@@ -102,12 +103,13 @@ jobs:
                   # 获取 Cargo.toml 中的项目名称
                   BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
                   echo "Binary name from Cargo.toml: $BINARY_NAME"
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
                   
                   # 设置输出文件名
                   if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    OUTPUT_NAME="${PROJECT}-${VERSION}-${{ matrix.target }}.exe"
+                    OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
                   else
-                    OUTPUT_NAME="${PROJECT}-${VERSION}-${{ matrix.target }}"
+                    OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
                   fi
                   
                   echo "Output name: $OUTPUT_NAME"
@@ -132,19 +134,12 @@ jobs:
                   else
                     cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
                   fi
-                  
-                  # 压缩
-                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    7z a "${OUTPUT_NAME}.zip" "$OUTPUT_NAME"
-                  else
-                    tar -czf "${OUTPUT_NAME}.tar.gz" "$OUTPUT_NAME"
-                  fi
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
-                  path: package/${{ needs.get-project.outputs.project }}/${{ needs.get-project.outputs.project }}-*
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
 
     release:
         needs: [get-project, build]
