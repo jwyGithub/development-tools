@@ -1,112 +1,205 @@
-name: Release Pipeline
+name: Release
 
 on:
     push:
         tags:
-            - '*-v*' # 保留原有标签匹配模式
+            # 支持 giter-v*, ziper-v* 等格式的标签
+            - '*-v*'
 
-env:
-    CARGO_CACHE_KEY: cargo-${{ github.sha }}
-    OSSL_VENDORED: 'false'
-
+# 添加全局权限配置
 permissions:
     contents: write
     packages: write
 
 jobs:
-    setup:
+    get-project:
         runs-on: ubuntu-latest
         outputs:
             project: ${{ steps.set-project.outputs.project }}
-            semver: ${{ steps.set-version.outputs.semver }}
+            version: ${{ steps.set-version.outputs.version }}
         steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0 # 完整克隆以正确解析标签
-
-            - name: Parse Semantic Versioning
-              id: set-version
-              run: |
-                  TAG="${GITHUB_REF#refs/tags/}"
-                  # 增强版本号解析，兼容 v1.2.3-rc 等格式
-                  if [[ "$TAG" =~ ([0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?) ]]; then
-                    SEMVER="${BASH_REMATCH[1]}"
-                    echo "semver=$SEMVER" >> $GITHUB_OUTPUT
-                  else
-                    echo "::error::Invalid version format in tag: $TAG"
-                    exit 1
-                  fi
-
-            - name: Extract Project Name
+            - name: Get project and version from tag
               id: set-project
               run: |
-                  TAG="${GITHUB_REF#refs/tags/}"
-                  PROJECT="${TAG%%-v*}"
-                  echo "project=${PROJECT}" >> $GITHUB_OUTPUT
+                  TAG=${{ github.ref_name }}
+                  PROJECT=$(echo $TAG | cut -d'-' -f1)
+                  VERSION=$(echo $TAG | cut -d'-' -f2)
+                  echo "project=$PROJECT" >> $GITHUB_OUTPUT
+                  echo "Selected project: $PROJECT"
 
-    build-base:
-        needs: setup
+            - name: Set version
+              id: set-version
+              run: |
+                  TAG=${{ github.ref_name }}
+                  VERSION=$(echo $TAG | cut -d'-' -f2 | sed 's/^v//')
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Version: $VERSION"
+
+    build-unix:
+        needs: get-project
         strategy:
-            matrix:
-                targets:
-                    [
-                        { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, cross: true },
-                        { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, cross: true }
-                    ]
             fail-fast: false
+            matrix:
+                include:
+                    # Linux x64
+                    - target: x86_64-unknown-linux-gnu
+                    # Linux ARM64
+                    - target: aarch64-unknown-linux-gnu
 
-        runs-on: ${{ matrix.targets.os }}
+        runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
 
-            # 新增清理步骤
-            - name: Clean previous builds
-              run: cargo clean
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  target: ${{ matrix.target }}
 
-            - name: Install Cross Dependencies
-              run: |
-                  sudo dpkg --add-architecture $(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)
-                  sudo apt-get update
-                  sudo apt-get install -y \
-                    libssl-dev:$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1) \
-                    gcc-$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)-linux-gnu
+            - name: Install cross
+              run: cargo install cross --git https://github.com/cross-rs/cross
 
-            - name: Configure dynamic linking
+            - name: Build Release
+              shell: bash
+              id: build
               run: |
-                  echo "/usr/lib/$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)-linux-gnu" | sudo tee /etc/ld.so.conf.d/cross.conf
-                  sudo ldconfig
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
 
-            - name: Build with openssl-sys vendored
-              env:
-                  OPENSSL_NO_VENDOR: 0 # 强制使用 vendored
+                  cd package/$PROJECT
+
+                  # 获取二进制名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+                  # 设置输出文件名
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
+
+                  # 使用 cross 构建
+                  cross build --target ${{ matrix.target }} --release
+
+                  # 复制构建产物
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
+
+    build-windows:
+        needs: get-project
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                    - os: windows-latest
+                      target: aarch64-pc-windows-msvc
+
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  target: ${{ matrix.target }}
+
+            - name: Build Release
+              shell: bash
+              id: build
               run: |
-                  cross build \
-                    --target ${{ matrix.targets.target }} \
-                    --release \
-                    -p ${{ needs.setup.outputs.project }}
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
+
+                  cd package/$PROJECT
+
+                  # 获取二进制名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+                  # 设置输出文件名
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
+
+                  # 原生构建
+                  cargo build --target ${{ matrix.target }} --release
+
+                  # 复制构建产物
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
+
+    build-macos:
+        needs: get-project
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  target: ${{ matrix.target }}
+
+            - name: Build Release
+              shell: bash
+              id: build
+              run: |
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
+
+                  cd package/$PROJECT
+
+                  # 获取二进制名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+                  # 设置输出文件名
+                  OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
+
+                  # 原生构建
+                  cargo build --target ${{ matrix.target }} --release
+
+                  # 复制构建产物
+                  cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ needs.get-project.outputs.project }}-${{ matrix.target }}
+                  path: package/${{ needs.get-project.outputs.project }}/${{ steps.build.outputs.binary_name }}-*
 
     release:
-        needs: [setup]
+        needs: [get-project, build-unix, build-windows, build-macos]
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            packages: write
         steps:
-            - name: Download Artifacts
+            - name: Download all artifacts
               uses: actions/download-artifact@v4
-              with:
-                  path: artifacts
 
-            - name: Validate Checksums
-              run: |
-                  find artifacts -type f -print0 | xargs -0 shasum -a 256 > SHA256SUMS
-                  echo "Checksum validation passed"
-
-            - uses: softprops/action-gh-release@v2
-              with:
-                  tag_name: ${{ github.ref_name }}
-                  name: '${{ needs.setup.outputs.project }} v${{ needs.setup.outputs.semver }}'
-                  body: 'Multi-architecture builds for ${{ needs.setup.outputs.semver }}'
-                  files: |
-                      artifacts/*
-                      SHA256SUMS
+            - name: Create Release
+              uses: softprops/action-gh-release@v2
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+              with:
+                  files: |
+                      */*
+                  name: ${{ needs.get-project.outputs.project }} ${{ needs.get-project.outputs.version }}
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
