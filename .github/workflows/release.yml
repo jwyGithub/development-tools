@@ -69,16 +69,25 @@ jobs:
               with:
                   targets: ${{ matrix.target }}
 
-            # 安装 OpenSSL 依赖
+            # 安装 OpenSSL 依赖（仅 Linux）
             - name: Install OpenSSL (Ubuntu)
               if: matrix.os == 'ubuntu-latest'
               run: |
+                  sudo dpkg --add-architecture arm64
                   sudo apt-get update
-                  sudo apt-get install -y pkg-config libssl-dev
                   if [ "${{ matrix.arch }}" = "aarch64" ]; then
-                    sudo apt-get install -y libssl-dev:arm64
+                    sudo apt-get install -y --no-install-recommends \
+                      gcc-aarch64-linux-gnu \
+                      g++-aarch64-linux-gnu \
+                      pkg-config \
+                      libssl-dev:arm64
+                  else
+                    sudo apt-get install -y --no-install-recommends \
+                      pkg-config \
+                      libssl-dev
                   fi
 
+            # 安装 OpenSSL 依赖（仅 macOS）
             - name: Install OpenSSL (macOS)
               if: matrix.os == 'macos-latest'
               run: |
@@ -86,34 +95,45 @@ jobs:
                   echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
                   echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
 
-            - name: Install OpenSSL (Windows)
-              if: matrix.os == 'windows-latest'
-              run: |
-                  if [ "${{ matrix.arch }}" = "aarch64" ]; then
-                    vcpkg install openssl:arm64-windows-static
-                    echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
-                    echo "OPENSSL_DIR=C:/vcpkg/installed/arm64-windows-static" >> $GITHUB_ENV
-                    echo "OPENSSL_ROOT_DIR=C:/vcpkg/installed/arm64-windows-static" >> $GITHUB_ENV
-                  else
-                    vcpkg install openssl:x64-windows-static
-                    echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
-                    echo "OPENSSL_DIR=C:/vcpkg/installed/x64-windows-static" >> $GITHUB_ENV
-                    echo "OPENSSL_ROOT_DIR=C:/vcpkg/installed/x64-windows-static" >> $GITHUB_ENV
-                  fi
-
             # 安装 Linux ARM64 交叉编译工具
             - name: Install cross-compilation tools (Ubuntu ARM64)
               if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
               run: |
-                  sudo apt-get update
-                  sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
                   echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
                   echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
                   echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+                  echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
+
+            # 设置 macOS ARM64 交叉编译环境
+            - name: Setup macOS ARM64 environment
+              if: matrix.os == 'macos-latest' && matrix.arch == 'aarch64'
+              run: |
+                  echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+                  echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+                  echo "CFLAGS=-target aarch64-apple-darwin" >> $GITHUB_ENV
+                  echo "CXXFLAGS=-target aarch64-apple-darwin" >> $GITHUB_ENV
+                  echo "RUSTFLAGS=-C target-cpu=apple-a14" >> $GITHUB_ENV
 
             - name: Build Release
               shell: bash
               id: build
+              env:
+                  # Linux ARM64 环境变量
+                  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64' && 'aarch64-linux-gnu-gcc' || '' }}
+                  CC_aarch64_unknown_linux_gnu: ${{ matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64' && 'aarch64-linux-gnu-gcc' || '' }}
+                  CXX_aarch64_unknown_linux_gnu: ${{ matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64' && 'aarch64-linux-gnu-g++' || '' }}
+                  PKG_CONFIG_PATH: ${{ matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64' && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
+                  
+                  # macOS 环境变量
+                  MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os == 'macos-latest' && '11.0' || '' }}
+                  SDKROOT: ${{ matrix.os == 'macos-latest' && matrix.arch == 'aarch64' && '$(xcrun -sdk macosx --show-sdk-path)' || '' }}
+                  CFLAGS: ${{ matrix.os == 'macos-latest' && matrix.arch == 'aarch64' && '-target aarch64-apple-darwin' || '' }}
+                  CXXFLAGS: ${{ matrix.os == 'macos-latest' && matrix.arch == 'aarch64' && '-target aarch64-apple-darwin' || '' }}
+                  RUSTFLAGS: ${{ matrix.os == 'macos-latest' && matrix.arch == 'aarch64' && '-C target-cpu=apple-a14' || '' }}
+                  
+                  # OpenSSL 环境变量（macOS）
+                  OPENSSL_DIR: ${{ matrix.os == 'macos-latest' && '$(brew --prefix openssl@3)' || '' }}
+                  OPENSSL_ROOT_DIR: ${{ matrix.os == 'macos-latest' && '$(brew --prefix openssl@3)' || '' }}
               run: |
                   PROJECT=${{ needs.get-project.outputs.project }}
                   VERSION=${{ needs.get-project.outputs.version }}
@@ -148,11 +168,7 @@ jobs:
                   
                   # 构建
                   echo "Building target: ${{ matrix.target }}"
-                  if [ "${{ matrix.os }}" = "ubuntu-latest" ] && [ "${{ matrix.arch }}" = "aarch64" ]; then
-                    RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target ${{ matrix.target }}
-                  else
-                    cargo build --release --target ${{ matrix.target }}
-                  fi
+                  cargo build --release --target ${{ matrix.target }}
                   
                   # 验证构建结果
                   if [ $? -ne 0 ]; then
@@ -183,7 +199,7 @@ jobs:
         steps:
             - name: Download all artifacts
               uses: actions/download-artifact@v4
-              
+
             - name: Create Release
               uses: softprops/action-gh-release@v2
               env:
