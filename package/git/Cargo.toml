@@ -10,7 +10,7 @@ license = "MIT"
 clap = { version = "4.5.1", features = ["derive"] }  # 命令行参数解析
 git2 = "0.20.0"                                      # Git 操作
 prettytable-rs = "0.10.0"                           # 表格展示
-colored = "2.1.0"                                    # 颜色输出
+colored = "3.0.0"                                    # 颜色输出
 anyhow = "1.0.79"                                   # 错误处理
 
 [profile.release]
