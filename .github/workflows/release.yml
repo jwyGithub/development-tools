@@ -36,8 +36,25 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: [ubuntu-latest, windows-latest, macos-latest]
-                arch: [x86_64, aarch64]
+                include:
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      arch: x86_64
+                    - os: ubuntu-latest
+                      target: aarch64-unknown-linux-gnu
+                      arch: aarch64
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      arch: x86_64
+                    - os: windows-latest
+                      target: aarch64-pc-windows-msvc
+                      arch: aarch64
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      arch: x86_64
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      arch: aarch64
 
         steps:
             - uses: actions/checkout@v4
@@ -45,25 +62,17 @@ jobs:
             - name: Setup Rust toolchain
               uses: dtolnay/rust-toolchain@stable
               with:
-                  targets: ${{ matrix.arch }}-unknown-linux-gnu, ${{ matrix.arch }}-apple-darwin, ${{ matrix.arch }}-pc-windows-msvc
+                  targets: ${{ matrix.target }}
 
-            # 安装 Linux 交叉编译工具
-            - name: Install cross-compilation tools (Ubuntu)
-              if: matrix.os == 'ubuntu-latest'
+            # 安装 Linux ARM64 交叉编译工具
+            - name: Install cross-compilation tools (Ubuntu ARM64)
+              if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
               run: |
                   sudo apt-get update
-                  if [ "${{ matrix.arch }}" = "aarch64" ]; then
-                    sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-                    echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-                    echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-                    echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-                  fi
-
-            # 安装 macOS 交叉编译工具
-            - name: Install macOS cross-compilation tools
-              if: matrix.os == 'macos-latest'
-              run: |
-                  rustup target add ${{ matrix.arch }}-apple-darwin
+                  sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+                  echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+                  echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+                  echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
 
             - name: Build Release
               shell: bash
@@ -85,87 +94,45 @@ jobs:
                   cd package/$PROJECT
                   echo "Changed to directory: $(pwd)"
                   
-                  # 设置目标平台
-                  if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-                    TARGET="${{ matrix.arch }}-unknown-linux-gnu"
-                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}"
-                  elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    TARGET="${{ matrix.arch }}-pc-windows-msvc"
-                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}.exe"
+                  # 获取 Cargo.toml 中的项目名称
+                  BINARY_NAME=$(grep "^name\s*=" Cargo.toml | head -n1 | cut -d'"' -f2 || echo "$PROJECT")
+                  echo "Binary name from Cargo.toml: $BINARY_NAME"
+                  
+                  # 设置输出文件名
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    OUTPUT_NAME="${PROJECT}-${VERSION}-${{ matrix.target }}.exe"
                   else
-                    TARGET="${{ matrix.arch }}-apple-darwin"
-                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}"
+                    OUTPUT_NAME="${PROJECT}-${VERSION}-${{ matrix.target }}"
                   fi
-
-                  echo "Target: $TARGET"
-                  echo "Binary name: $BINARY_NAME"
-
+                  
+                  echo "Output name: $OUTPUT_NAME"
+                  
                   # 构建
-                  echo "Building target: $TARGET"
+                  echo "Building target: ${{ matrix.target }}"
                   if [ "${{ matrix.os }}" = "ubuntu-latest" ] && [ "${{ matrix.arch }}" = "aarch64" ]; then
-                    RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target $TARGET
+                    RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target ${{ matrix.target }}
                   else
-                    cargo build --release --target $TARGET
+                    cargo build --release --target ${{ matrix.target }}
                   fi
-
+                  
                   # 验证构建结果
                   if [ $? -ne 0 ]; then
                     echo "Error: Cargo build failed"
                     exit 1
                   fi
-
-                  # 检查目标文件是否存在
-                  TARGET_DIR="../../target/$TARGET/release"
-                  echo "Checking target directory: $TARGET_DIR"
-                  ls -la $TARGET_DIR || true
-
-                  # 获取正确的二进制文件名
-                  BINARY_FILE="$PROJECT"
+                  
+                  # 复制构建产物
                   if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    BINARY_FILE="${BINARY_FILE}.exe"
-                  fi
-
-                  if [ ! -f "$TARGET_DIR/$BINARY_FILE" ]; then
-                    echo "Binary not found at $TARGET_DIR/$BINARY_FILE"
-                    echo "Checking for alternative names:"
-                    ls -la $TARGET_DIR
-                    # 尝试查找实际的二进制文件
-                    ACTUAL_BINARY=$(find $TARGET_DIR -type f -executable -not -name "*.d" -not -name "*.rlib" | head -n 1)
-                    if [ ! -z "$ACTUAL_BINARY" ]; then
-                      echo "Found alternative binary: $ACTUAL_BINARY"
-                      cp "$ACTUAL_BINARY" "$BINARY_NAME"
-                    else
-                      echo "Error: No suitable binary found"
-                      exit 1
-                    fi
+                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
                   else
-                    cp "$TARGET_DIR/$BINARY_FILE" "$BINARY_NAME"
+                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
                   fi
-
-                  # 验证复制结果
-                  if [ ! -f "$BINARY_NAME" ]; then
-                    echo "Error: Failed to copy binary to $BINARY_NAME"
-                    exit 1
-                  fi
-
+                  
                   # 压缩
                   if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    7z a "${BINARY_NAME}.zip" "$BINARY_NAME"
+                    7z a "${OUTPUT_NAME}.zip" "$OUTPUT_NAME"
                   else
-                    tar -czf "${BINARY_NAME}.tar.gz" "$BINARY_NAME"
-                  fi
-
-                  # 验证压缩文件
-                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    if [ ! -f "${BINARY_NAME}.zip" ]; then
-                      echo "Error: Failed to create ${BINARY_NAME}.zip"
-                      exit 1
-                    fi
-                  else
-                    if [ ! -f "${BINARY_NAME}.tar.gz" ]; then
-                      echo "Error: Failed to create ${BINARY_NAME}.tar.gz"
-                      exit 1
-                    fi
+                    tar -czf "${OUTPUT_NAME}.tar.gz" "$OUTPUT_NAME"
                   fi
 
             - name: Upload artifacts
