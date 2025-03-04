@@ -1,0 +1,117 @@
+name: Release
+
+on:
+    push:
+        tags:
+            # 支持 giter-v*, ziper-v* 等格式的标签
+            - '*-v*'
+
+jobs:
+    get-project:
+        runs-on: ubuntu-latest
+        outputs:
+            project: ${{ steps.set-project.outputs.project }}
+            version: ${{ steps.set-version.outputs.version }}
+        steps:
+            - name: Get project and version from tag
+              id: set-project
+              run: |
+                  TAG=${{ github.ref_name }}
+                  PROJECT=$(echo $TAG | cut -d'-' -f1)
+                  VERSION=$(echo $TAG | cut -d'-' -f2)
+                  echo "project=$PROJECT" >> $GITHUB_OUTPUT
+                  echo "Selected project: $PROJECT"
+
+            - name: Set version
+              id: set-version
+              run: |
+                  TAG=${{ github.ref_name }}
+                  VERSION=$(echo $TAG | cut -d'-' -f2 | sed 's/^v//')
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Version: $VERSION"
+
+    build:
+        needs: get-project
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest, macos-latest]
+                arch: [x86_64, aarch64]
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.arch }}-unknown-linux-gnu, ${{ matrix.arch }}-apple-darwin, ${{ matrix.arch }}-pc-windows-msvc
+
+            - name: Install dependencies (Ubuntu)
+              if: matrix.os == 'ubuntu-latest'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y gcc-aarch64-linux-gnu
+
+            - name: Build Release
+              shell: bash
+              run: |
+                  PROJECT=${{ needs.get-project.outputs.project }}
+                  VERSION=${{ needs.get-project.outputs.version }}
+
+                  cd package/$PROJECT
+
+                  # 设置目标平台
+                  if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+                    TARGET="${{ matrix.arch }}-unknown-linux-gnu"
+                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}"
+                  elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    TARGET="${{ matrix.arch }}-pc-windows-msvc"
+                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}.exe"
+                  else
+                    TARGET="${{ matrix.arch }}-apple-darwin"
+                    BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}"
+                  fi
+
+                  # 构建
+                  cargo build --release --target $TARGET
+
+                  # 打包
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    cp ../../target/$TARGET/release/$PROJECT.exe $BINARY_NAME
+                  else
+                    cp ../../target/$TARGET/release/$PROJECT $BINARY_NAME
+                  fi
+
+                  # 压缩
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    7z a "${BINARY_NAME}.zip" $BINARY_NAME
+                  else
+                    tar -czf "${BINARY_NAME}.tar.gz" $BINARY_NAME
+                  fi
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binaries
+                  path: package/${{ needs.get-project.outputs.project }}/${{ needs.get-project.outputs.project }}-*
+
+    release:
+        needs: [get-project, build]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: binaries
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: |
+                      ${{ needs.get-project.outputs.project }}-*
+                  name: ${{ needs.get-project.outputs.project }} ${{ needs.get-project.outputs.version }}
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
+
