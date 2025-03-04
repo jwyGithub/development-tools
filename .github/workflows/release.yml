@@ -42,37 +42,28 @@ jobs:
             matrix:
                 include:
                     # Linux x64
-                    - os: ubuntu-latest
-                      runner: ubuntu-latest
-                      target: x86_64-unknown-linux-gnu
+                    - target: x86_64-unknown-linux-gnu
                     # Linux ARM64
-                    - os: ubuntu-latest
-                      runner: ubuntu-latest-arm64
-                      target: aarch64-unknown-linux-gnu
+                    - target: aarch64-unknown-linux-gnu
                     # Windows x64
-                    - os: windows-latest
-                      runner: windows-latest
-                      target: x86_64-pc-windows-msvc
+                    - target: x86_64-pc-windows-msvc
                     # Windows ARM64
-                    - os: windows-latest
-                      runner: windows-latest-arm64
-                      target: aarch64-pc-windows-msvc
+                    - target: aarch64-pc-windows-msvc
                     # macOS x64
-                    - os: macos-latest
-                      runner: macos-latest
-                      target: x86_64-apple-darwin
+                    - target: x86_64-apple-darwin
                     # macOS ARM64
-                    - os: macos-latest
-                      runner: macos-latest-arm64
-                      target: aarch64-apple-darwin
+                    - target: aarch64-apple-darwin
 
-        runs-on: ${{ matrix.runner }}
+        runs-on: ubuntu-latest
         
         steps:
             - uses: actions/checkout@v4
 
             - name: Setup Rust toolchain
               uses: dtolnay/rust-toolchain@stable
+
+            - name: Install cross
+              run: cargo install cross --git https://github.com/cross-rs/cross
 
             - name: Build Release
               shell: bash
@@ -101,7 +92,7 @@ jobs:
                   echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
                   
                   # 设置输出文件名
-                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                  if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
                     OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
                   else
                     OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
@@ -109,21 +100,26 @@ jobs:
                   
                   echo "Output name: $OUTPUT_NAME"
                   
-                  # 构建
-                  echo "Building release..."
-                  cargo build --release
+                  # 使用 cross 进行构建
+                  if [[ "${{ matrix.target }}" == *"-windows-"* ]] || [[ "${{ matrix.target }}" == *"-apple-"* ]]; then
+                    echo "Skipping cross build for Windows/macOS target: ${{ matrix.target }}"
+                    cargo build --release --target ${{ matrix.target }}
+                  else
+                    echo "Using cross for target: ${{ matrix.target }}"
+                    cross build --target ${{ matrix.target }} --release
+                  fi
                   
                   # 验证构建结果
                   if [ $? -ne 0 ]; then
-                    echo "Error: Cargo build failed"
+                    echo "Error: Build failed"
                     exit 1
                   fi
                   
                   # 复制构建产物
-                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    cp "target/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
+                  if [[ "${{ matrix.target }}" == *"-windows-"* ]]; then
+                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
                   else
-                    cp "target/release/${BINARY_NAME}" "$OUTPUT_NAME"
+                    cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
                   fi
 
             - name: Upload artifacts
@@ -135,7 +131,6 @@ jobs:
     release:
         needs: [get-project, build]
         runs-on: ubuntu-latest
-        # 添加 release job 的权限配置
         permissions:
             contents: write
             packages: write
