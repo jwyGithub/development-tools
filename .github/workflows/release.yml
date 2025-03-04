@@ -47,20 +47,44 @@ jobs:
               with:
                   targets: ${{ matrix.arch }}-unknown-linux-gnu, ${{ matrix.arch }}-apple-darwin, ${{ matrix.arch }}-pc-windows-msvc
 
-            - name: Install dependencies (Ubuntu)
+            # 安装 Linux 交叉编译工具
+            - name: Install cross-compilation tools (Ubuntu)
               if: matrix.os == 'ubuntu-latest'
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y gcc-aarch64-linux-gnu
+                  if [ "${{ matrix.arch }}" = "aarch64" ]; then
+                    sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+                    echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+                    echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+                    echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+                  fi
+
+            # 安装 macOS 交叉编译工具
+            - name: Install macOS cross-compilation tools
+              if: matrix.os == 'macos-latest'
+              run: |
+                  rustup target add ${{ matrix.arch }}-apple-darwin
 
             - name: Build Release
               shell: bash
               run: |
                   PROJECT=${{ needs.get-project.outputs.project }}
                   VERSION=${{ needs.get-project.outputs.version }}
-
+                  
+                  echo "Current directory: $(pwd)"
+                  echo "Project: $PROJECT"
+                  echo "Version: $VERSION"
+                  
+                  # 检查项目目录
+                  if [ ! -d "package/$PROJECT" ]; then
+                    echo "Error: Project directory package/$PROJECT does not exist"
+                    ls -la package/
+                    exit 1
+                  fi
+                  
                   cd package/$PROJECT
-
+                  echo "Changed to directory: $(pwd)"
+                  
                   # 设置目标平台
                   if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
                     TARGET="${{ matrix.arch }}-unknown-linux-gnu"
@@ -73,21 +97,75 @@ jobs:
                     BINARY_NAME="${PROJECT}-${VERSION}-${TARGET}"
                   fi
 
-                  # 构建
-                  cargo build --release --target $TARGET
+                  echo "Target: $TARGET"
+                  echo "Binary name: $BINARY_NAME"
 
-                  # 打包
-                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    cp ../../target/$TARGET/release/$PROJECT.exe $BINARY_NAME
+                  # 构建
+                  echo "Building target: $TARGET"
+                  if [ "${{ matrix.os }}" = "ubuntu-latest" ] && [ "${{ matrix.arch }}" = "aarch64" ]; then
+                    RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target $TARGET
                   else
-                    cp ../../target/$TARGET/release/$PROJECT $BINARY_NAME
+                    cargo build --release --target $TARGET
+                  fi
+
+                  # 验证构建结果
+                  if [ $? -ne 0 ]; then
+                    echo "Error: Cargo build failed"
+                    exit 1
+                  fi
+
+                  # 检查目标文件是否存在
+                  TARGET_DIR="../../target/$TARGET/release"
+                  echo "Checking target directory: $TARGET_DIR"
+                  ls -la $TARGET_DIR || true
+
+                  # 获取正确的二进制文件名
+                  BINARY_FILE="$PROJECT"
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    BINARY_FILE="${BINARY_FILE}.exe"
+                  fi
+
+                  if [ ! -f "$TARGET_DIR/$BINARY_FILE" ]; then
+                    echo "Binary not found at $TARGET_DIR/$BINARY_FILE"
+                    echo "Checking for alternative names:"
+                    ls -la $TARGET_DIR
+                    # 尝试查找实际的二进制文件
+                    ACTUAL_BINARY=$(find $TARGET_DIR -type f -executable -not -name "*.d" -not -name "*.rlib" | head -n 1)
+                    if [ ! -z "$ACTUAL_BINARY" ]; then
+                      echo "Found alternative binary: $ACTUAL_BINARY"
+                      cp "$ACTUAL_BINARY" "$BINARY_NAME"
+                    else
+                      echo "Error: No suitable binary found"
+                      exit 1
+                    fi
+                  else
+                    cp "$TARGET_DIR/$BINARY_FILE" "$BINARY_NAME"
+                  fi
+
+                  # 验证复制结果
+                  if [ ! -f "$BINARY_NAME" ]; then
+                    echo "Error: Failed to copy binary to $BINARY_NAME"
+                    exit 1
                   fi
 
                   # 压缩
                   if [ "${{ matrix.os }}" = "windows-latest" ]; then
-                    7z a "${BINARY_NAME}.zip" $BINARY_NAME
+                    7z a "${BINARY_NAME}.zip" "$BINARY_NAME"
                   else
-                    tar -czf "${BINARY_NAME}.tar.gz" $BINARY_NAME
+                    tar -czf "${BINARY_NAME}.tar.gz" "$BINARY_NAME"
+                  fi
+
+                  # 验证压缩文件
+                  if [ "${{ matrix.os }}" = "windows-latest" ]; then
+                    if [ ! -f "${BINARY_NAME}.zip" ]; then
+                      echo "Error: Failed to create ${BINARY_NAME}.zip"
+                      exit 1
+                    fi
+                  else
+                    if [ ! -f "${BINARY_NAME}.tar.gz" ]; then
+                      echo "Error: Failed to create ${BINARY_NAME}.tar.gz"
+                      exit 1
+                    fi
                   fi
 
             - name: Upload artifacts

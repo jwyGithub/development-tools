@@ -5,7 +5,6 @@ use log::{error, info, warn, LevelFilter};
 use path_clean::clean;
 use std::fs::File;
 use std::io::{self, Write};
-#[cfg(unix)]
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 

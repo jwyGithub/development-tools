@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use git2::{BranchType, Repository};
 use prettytable::{Cell, Row, Table};
+#[cfg(unix)]
 use std::path::PathBuf;
 
 /// Git 工具集
