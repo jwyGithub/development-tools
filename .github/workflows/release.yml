@@ -6,6 +6,11 @@ on:
             # 支持 giter-v*, ziper-v* 等格式的标签
             - '*-v*'
 
+# 添加全局权限配置
+permissions:
+    contents: write
+    packages: write
+
 jobs:
     get-project:
         runs-on: ubuntu-latest
@@ -144,12 +149,18 @@ jobs:
     release:
         needs: [get-project, build]
         runs-on: ubuntu-latest
+        # 添加 release job 的权限配置
+        permissions:
+            contents: write
+            packages: write
         steps:
             - name: Download all artifacts
               uses: actions/download-artifact@v4
               
             - name: Create Release
               uses: softprops/action-gh-release@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                   files: |
                       */*
