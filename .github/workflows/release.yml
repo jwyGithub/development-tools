@@ -51,80 +51,42 @@ jobs:
                 targets:
                     [
                         { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, cross: true },
-                        { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, cross: true },
-                        { os: windows-latest, target: x86_64-pc-windows-msvc, cross: false },
-                        { os: windows-latest, target: aarch64-pc-windows-msvc, cross: false },
-                        { os: macos-latest, target: x86_64-apple-darwin, cross: false },
-                        { os: macos-latest, target: aarch64-apple-darwin, cross: false }
+                        { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, cross: true }
                     ]
             fail-fast: false
 
         runs-on: ${{ matrix.targets.os }}
-        defaults:
-            run:
-                shell: bash
-
         steps:
             - uses: actions/checkout@v4
 
-            - name: Cache Rust Dependencies
-              uses: actions/cache@v3
-              with:
-                  path: |
-                      ~/.cargo/registry
-                      ~/.cargo/git
-                      target
-                  key: ${{ env.CARGO_CACHE_KEY }}
+            # 新增清理步骤
+            - name: Clean previous builds
+              run: cargo clean
 
-            - name: Install Cross-Compile Dependencies (Linux)
-              if: contains(matrix.targets.os, 'ubuntu')
+            - name: Install Cross Dependencies
               run: |
                   sudo dpkg --add-architecture $(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)
-                  sudo apt-get update -y
+                  sudo apt-get update
                   sudo apt-get install -y \
                     libssl-dev:$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1) \
                     gcc-$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)-linux-gnu
 
-            - name: Setup Rust Toolchain
-              uses: dtolnay/rust-toolchain@stable
-              with:
-                  target: ${{ matrix.targets.target }}
-
-            - name: Install cross (if needed)
-              if: matrix.targets.cross
-              run: cargo install cross --features vendored-openssl
-
-            - name: Build Binary
-              env:
-                  CARGO_TARGET_DIR: ./target-cross # 防止与原生构建冲突
+            - name: Configure dynamic linking
               run: |
-                  PROJECT=${{ needs.setup.outputs.project }}
-                  cd package/$PROJECT
+                  echo "/usr/lib/$(echo "${{ matrix.targets.target }}" | cut -d'-' -f1)-linux-gnu" | sudo tee /etc/ld.so.conf.d/cross.conf
+                  sudo ldconfig
 
-                  BUILD_CMD="build"
-                  [ "${{ matrix.targets.cross }}" = "true" ] && BUILD_CMD="cross build"
-
-                  $BUILD_CMD \
+            - name: Build with openssl-sys vendored
+              env:
+                  OPENSSL_NO_VENDOR: 0 # 强制使用 vendored
+              run: |
+                  cross build \
                     --target ${{ matrix.targets.target }} \
                     --release \
-                    --features ${{ env.OSSL_VENDORED }}
-
-                  BIN_NAME=$(cargo metadata --format-version=1 | jq -r '.packages[0].targets[] | select(.kind[] | contains("bin")).name')
-                  OUTPUT_FILE="artifact-${{ matrix.targets.target }}"
-
-                  if [[ "${{ matrix.targets.os }}" =~ windows ]]; then
-                    mv "./target-cross/${{ matrix.targets.target }}/release/${BIN_NAME}.exe" "${OUTPUT_FILE}.exe"
-                  else
-                    mv "./target-cross/${{ matrix.targets.target }}/release/${BIN_NAME}" "${OUTPUT_FILE}"
-                  fi
-
-            - uses: actions/upload-artifact@v4
-              with:
-                  name: ${{ needs.setup.outputs.project }}-${{ matrix.targets.target }}
-                  path: package/${{ needs.setup.outputs.project }}/artifact-*
+                    -p ${{ needs.setup.outputs.project }}
 
     release:
-        needs: [setup, build-base]
+        needs: [setup]
         runs-on: ubuntu-latest
         steps:
             - name: Download Artifacts
