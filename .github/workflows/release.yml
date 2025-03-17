@@ -79,7 +79,7 @@ jobs:
                   OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
 
                   # 使用 cross 构建
-                  cross build --target ${{ matrix.target }} --release
+                  cross build --target ${{ matrix.target }} --release --features vendored-openssl
 
                   # 复制构建产物
                   cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
@@ -127,7 +127,7 @@ jobs:
                   OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
 
                   # 原生构建
-                  cargo build --target ${{ matrix.target }} --release
+                  cargo build --target ${{ matrix.target }} --release --features vendored-openssl
 
                   # 复制构建产物
                   cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
@@ -203,20 +203,14 @@ jobs:
                   # 根据目标架构选择正确的构建命令
                   if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
                     # 在 macOS 上构建 x86_64 目标
-                    echo "构建 x86_64 目标..."
+                    echo "构建 x86_64 目标，使用 vendored-openssl 特性..."
                     
-                    # 设置额外的环境变量
-                    export OPENSSL_STATIC=1
-                    export OPENSSL_DIR=$(brew --prefix openssl@3)
-                    
-                    # 使用 RUSTFLAGS 添加链接参数
-                    export RUSTFLAGS="-C link-arg=-L$(brew --prefix openssl@3)/lib"
-                    
-                    # 构建
-                    cargo build --target ${{ matrix.target }} --release -vv
+                    # 使用 vendored-openssl 特性
+                    cargo build --target ${{ matrix.target }} --release -vv --features vendored-openssl
                   else
-                    # 原生构建
-                    cargo build --target ${{ matrix.target }} --release
+                    # 原生构建 ARM64 目标
+                    echo "构建 ARM64 目标，使用 vendored-openssl 特性..."
+                    cargo build --target ${{ matrix.target }} --release --features vendored-openssl
                   fi
 
                   # 复制构建产物

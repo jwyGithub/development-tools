@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.1", features = ["derive"] }  # 命令行参数解析
-git2 = "0.20.0"                                      # Git 操作
+git2 = { version = "0.20.0", features = ["vendored-openssl"] }  # Git 操作
 prettytable-rs = "0.10.0"                           # 表格展示
 colored = "3.0.0"                                    # 颜色输出
 anyhow = "1.0.79"                                   # 错误处理
@@ -19,3 +19,7 @@ lto = true                                          # 链接时优化
 codegen-units = 1                                   # 最大化大小优化
 panic = 'abort'                                     # 移除 panic 展开
 strip = true                                        # 移除符号信息
+
+[features]
+default = []
+vendored-openssl = ["git2/vendored-openssl"]
