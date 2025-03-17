@@ -1,7 +1,12 @@
 use crate::models::{BranchInfo, TagInfo};
 use prettytable::{Cell, Row, Table};
 
-pub fn display_branches(local: &[BranchInfo], remote: &[BranchInfo], show_local: bool, show_remote: bool) {
+pub fn display_branches(
+    local: &[BranchInfo],
+    remote: &[BranchInfo],
+    show_local: bool,
+    show_remote: bool,
+) {
     let mut table = Table::new();
     table.add_row(Row::new(vec![
         Cell::new("类型").style_spec("Fb"),
@@ -66,4 +71,4 @@ pub fn display_tags(local: &[TagInfo], remote: &[TagInfo], show_local: bool, sho
     }
 
     table.printstd();
-} 
+}

@@ -1,6 +1,11 @@
 use crate::models::{BranchInfo, TagInfo};
 
-pub fn display_branches(local: &[BranchInfo], remote: &[BranchInfo], show_local: bool, show_remote: bool) {
+pub fn display_branches(
+    local: &[BranchInfo],
+    remote: &[BranchInfo],
+    show_local: bool,
+    show_remote: bool,
+) {
     if show_local {
         println!("本地分支:");
         for branch in local {
@@ -29,7 +34,12 @@ pub fn display_tags(local: &[TagInfo], remote: &[TagInfo], show_local: bool, sho
         println!("本地标签:");
         for tag in local {
             if let Some(ref message) = tag.message {
-                println!("  {} {} {}", tag.display_name(true), tag.display_commit(), message);
+                println!(
+                    "  {} {} {}",
+                    tag.display_name(true),
+                    tag.display_commit(),
+                    message
+                );
             } else {
                 println!("  {} {}", tag.display_name(true), tag.display_commit());
             }
@@ -44,10 +54,15 @@ pub fn display_tags(local: &[TagInfo], remote: &[TagInfo], show_local: bool, sho
         println!("远程标签:");
         for tag in remote {
             if let Some(ref message) = tag.message {
-                println!("  {} {} {}", tag.display_name(false), tag.display_commit(), message);
+                println!(
+                    "  {} {} {}",
+                    tag.display_name(false),
+                    tag.display_commit(),
+                    message
+                );
             } else {
                 println!("  {} {}", tag.display_name(false), tag.display_commit());
             }
         }
     }
-} 
+}

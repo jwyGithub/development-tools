@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
-use git2::{ObjectType, PushOptions, Repository};
+use anyhow::Result;
+use git2::{ObjectType, Repository};
 
 use crate::models::TagInfo;
 
@@ -40,40 +40,4 @@ pub fn get_tag_info(repo: &Repository) -> Result<(Vec<TagInfo>, Vec<TagInfo>)> {
 
     // 为了保持接口兼容，返回所有标签作为本地标签
     Ok((tags, Vec::new()))
-}
-
-/// 删除标签
-pub fn delete_tag(repo: &Repository, tag_name: &str, delete_remote: bool, proxy: Option<String>) -> Result<()> {
-    // 检查本地标签是否存在
-    let tag_ref = format!("refs/tags/{}", tag_name);
-    let mut reference = repo
-        .find_reference(&tag_ref)
-        .with_context(|| format!("找不到标签 '{}'", tag_name))?;
-
-    // 删除本地标签
-    reference
-        .delete()
-        .with_context(|| format!("删除标签 '{}' 失败", tag_name))?;
-    println!("本地标签 '{}' 已删除", tag_name);
-
-    // 如果需要删除远程标签
-    if delete_remote {
-        // 设置代理
-        if let Some(proxy) = proxy {
-            std::env::set_var("http.proxy", proxy);
-        }
-        if let Ok(mut remote) = repo.find_remote("origin") {
-            // 构建推送 refspec
-            let refspec = format!(":refs/tags/{}", tag_name);
-            
-            // 创建 PushOptions 实例
-            let mut push_options = PushOptions::new();
-            
-            // 推送删除操作到远程
-            remote.push(&[&refspec], Some(&mut push_options))
-                .with_context(|| format!("删除远程标签 '{}' 失败", tag_name))?;
-        }
-    }
-
-    Ok(())
 }

@@ -28,4 +28,4 @@ impl BranchInfo {
     pub fn display_upstream(&self) -> String {
         self.upstream.as_deref().unwrap_or("-").to_string()
     }
-} 
+}

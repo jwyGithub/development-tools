@@ -33,10 +33,7 @@ use std::path::PathBuf;
     {bin} branch --remote
 
     # 查看标签 (View tags)
-    {bin} tag
-
-    # 删除标签 (Delete tag)
-    {bin} tag -d <tag-name>")]
+    {bin} tag")]
 pub struct Cli {
     /// 要执行的命令
     #[command(subcommand)]
@@ -89,21 +86,6 @@ pub enum Commands {
         /// (Display in table format - default)
         #[arg(short = 't', long = "table")]
         table: bool,
-
-        /// 删除标签
-        /// (Delete tag)
-        #[arg(short = 'd', long = "delete")]
-        delete: bool,
-
-        /// 标签名称
-        /// (Tag name)
-        #[arg(required_if_eq("delete", "true"))]
-        tag_name: Option<String>,
-
-        /// 同时删除远程标签
-        /// (Delete remote tag as well)
-        #[arg(short = 'r', long = "remote")]
-        remote: bool,
     },
 }
 
@@ -115,4 +97,4 @@ impl Cli {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         }
     }
-} 
+}

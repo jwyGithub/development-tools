@@ -34,30 +34,27 @@ fn main() -> Result<()> {
             let show_remote = !local;
 
             if list {
-                display::display_branches_list(&local_branches, &remote_branches, show_local, show_remote);
+                display::display_branches_list(
+                    &local_branches,
+                    &remote_branches,
+                    show_local,
+                    show_remote,
+                );
             } else {
-                display::display_branches_table(&local_branches, &remote_branches, show_local, show_remote);
+                display::display_branches_table(
+                    &local_branches,
+                    &remote_branches,
+                    show_local,
+                    show_remote,
+                );
             }
         }
-        Commands::Tag {
-            list,
-            table: _,
-            delete,
-            tag_name,
-            remote,
-        } => {
-            if delete {
-                if let Some(name) = tag_name {
-                    commands::delete_tag(&repo, &name, remote, cli.proxy.clone())?;
-                    println!("标签 '{}' 已删除", name);
-                }
+        Commands::Tag { list, table: _ } => {
+            let (tags, _) = commands::get_tag_info(&repo)?;
+            if list {
+                display::display_tags_list(&tags, &[], true, false);
             } else {
-                let (tags, _) = commands::get_tag_info(&repo)?;
-                if list {
-                    display::display_tags_list(&tags, &[], true, false);
-                } else {
-                    display::display_tags_table(&tags, &[], true, false);
-                }
+                display::display_tags_table(&tags, &[], true, false);
             }
         }
     }

@@ -32,4 +32,4 @@ impl TagInfo {
     pub fn display_message(&self) -> String {
         self.message.as_deref().unwrap_or("-").to_string()
     }
-} 
+}

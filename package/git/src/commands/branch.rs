@@ -51,4 +51,4 @@ pub fn get_branch_info(repo: &Repository) -> Result<(Vec<BranchInfo>, Vec<Branch
     remote_branches.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok((local_branches, remote_branches))
-} 
+}
