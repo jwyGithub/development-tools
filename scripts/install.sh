@@ -16,6 +16,11 @@ TOOLS_DIR="${HOME}/.development-tools"
 BIN_DIR="${TOOLS_DIR}/bin"
 TOOLS=("ziper" "giter")
 
+# 检测是否为交互式终端
+is_interactive() {
+    [ -t 0 ] && [ -t 1 ]
+}
+
 # 检测系统架构
 detect_arch() {
     local arch
@@ -195,6 +200,44 @@ upgrade_tool() {
     install_tool "$tool"
 }
 
+# 安装所有工具（非交互式模式）
+install_all_tools() {
+    echo -e "${BLUE}正在安装所有工具...${NC}"
+    for tool in "${TOOLS[@]}"; do
+        install_tool "$tool"
+    done
+    configure_path "$(detect_shell_config)"
+    echo -e "${GREEN}所有工具安装完成！${NC}"
+    echo -e "${YELLOW}请重新打开终端或运行 'source $(detect_shell_config)' 以使环境变量生效${NC}"
+}
+
+# 非交互式安装指定工具
+install_specific_tools() {
+    local tools_to_install=("$@")
+    
+    if [ ${#tools_to_install[@]} -eq 0 ]; then
+        echo -e "${RED}错误：未指定要安装的工具${NC}"
+        echo -e "${YELLOW}可用的工具: ${TOOLS[*]}${NC}"
+        exit 1
+    fi
+    
+    echo -e "${BLUE}正在安装指定的工具...${NC}"
+    for tool in "${tools_to_install[@]}"; do
+        # 检查工具是否在支持的列表中
+        if [[ " ${TOOLS[*]} " == *" $tool "* ]]; then
+            install_tool "$tool"
+        else
+            echo -e "${RED}错误：不支持的工具 '$tool'${NC}"
+            echo -e "${YELLOW}可用的工具: ${TOOLS[*]}${NC}"
+            exit 1
+        fi
+    done
+    
+    configure_path "$(detect_shell_config)"
+    echo -e "${GREEN}指定的工具安装完成！${NC}"
+    echo -e "${YELLOW}请重新打开终端或运行 'source $(detect_shell_config)' 以使环境变量生效${NC}"
+}
+
 # 主菜单
 show_menu() {
     echo -e "${BLUE}Development Tools 安装脚本${NC}"
@@ -270,10 +313,31 @@ show_menu() {
 
 # 主程序
 main() {
-    while true; do
-        show_menu
-        echo
-    done
+    # 检查是否为交互式终端
+    if is_interactive; then
+        # 交互式模式
+        while true; do
+            show_menu
+            echo
+        done
+    else
+        # 非交互式模式（通过管道执行）
+        # 检查是否有命令行参数
+        if [ $# -gt 0 ]; then
+            install_specific_tools "$@"
+        else
+            # 提示用户需要指定工具
+            echo -e "${YELLOW}请指定要安装的工具${NC}"
+            echo -e "${YELLOW}可用的工具: ${TOOLS[*]}${NC}"
+            echo -e "${YELLOW}示例: curl -fsSL URL | bash -s -- ziper${NC}"
+            exit 1
+        fi
+    fi
 }
 
-main
+# 如果脚本是通过管道执行的，则传递所有参数给main函数
+if ! is_interactive; then
+    main "$@"
+else
+    main
+fi

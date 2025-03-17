@@ -30,6 +30,47 @@
 
 ## 安装方法
 
+### 使用安装脚本
+
+我们提供了一个便捷的安装脚本，有两种使用方式：
+
+#### 方式一：通过管道执行脚本
+
+通过管道执行脚本，可以选择安装特定的工具：
+
+```bash
+# 安装单个工具（例如只安装 ziper）
+curl -fsSL https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.sh | bash -s -- ziper
+
+# 安装多个工具（例如同时安装 ziper 和 giter）
+curl -fsSL https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.sh | bash -s -- ziper giter
+
+# 使用 wget 安装
+wget -qO- https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.sh | bash -s -- ziper
+```
+
+#### 方式二：交互式安装
+
+下载脚本后交互式选择要安装的工具：
+
+```bash
+# 下载并执行脚本
+curl -fsSL https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
+
+# 或者直接克隆仓库并执行脚本
+git clone https://github.com/jwyGithub/development-tools.git
+cd development-tools
+bash scripts/install.sh
+```
+
+安装脚本提供以下功能：
+- 自动检测系统架构和操作系统
+- 下载适合你系统的二进制文件
+- 配置环境变量
+- 支持安装、升级和卸载工具
+
 ### 从预编译二进制文件安装
 
 1. 访问 [Releases](https://github.com/yourusername/development-tools/releases) 页面
