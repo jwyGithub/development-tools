@@ -58,6 +58,10 @@ jobs:
             - name: Install cross
               run: cargo install cross --git https://github.com/cross-rs/cross
 
+            - name: 安装 OpenSSL 依赖 (Linux)
+              if: runner.os == 'Linux'
+              run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
             - name: Build Release
               shell: bash
               id: build
@@ -153,6 +157,10 @@ jobs:
               uses: dtolnay/rust-toolchain@stable
               with:
                   target: ${{ matrix.target }}
+
+            - name: 安装 OpenSSL 依赖 (macOS)
+              if: runner.os == 'macOS'
+              run: brew install openssl@3 && echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
 
             - name: Build Release
               shell: bash
