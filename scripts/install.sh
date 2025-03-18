@@ -10,11 +10,43 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 版本信息
-VERSION="0.1.0"
+DEFAULT_VERSION="0.1.1"
 REPO_URL="https://github.com/jwyGithub/development-tools"
 TOOLS_DIR="${HOME}/.development-tools"
 BIN_DIR="${TOOLS_DIR}/bin"
 TOOLS=("ziper" "giter")
+
+# 获取最新版本
+get_latest_version() {
+    local tool=$1
+    local tag_prefix=""
+    
+    case "$tool" in
+        "ziper") tag_prefix="zip-v" ;;
+        "giter") tag_prefix="git-v" ;;
+        *) echo -e "${RED}未知的工具: ${tool}${NC}" >&2 && exit 1 ;;
+    esac
+    
+    echo -e "${BLUE}正在获取 ${tool} 的最新版本...${NC}" >&2
+    
+    # 尝试从GitHub API获取最新版本
+    local latest_version=""
+    if command -v curl &> /dev/null; then
+        latest_version=$(curl -s "https://api.github.com/repos/jwyGithub/development-tools/releases" | 
+                         grep -o "\"tag_name\": \"$tag_prefix[0-9.]*\"" | 
+                         head -n 1 | 
+                         sed -E "s/\"tag_name\": \"$tag_prefix([0-9.]*)\"/\1/")
+    fi
+    
+    # 如果无法获取最新版本，使用默认版本
+    if [ -z "$latest_version" ]; then
+        echo -e "${YELLOW}无法获取最新版本，使用默认版本 ${DEFAULT_VERSION}${NC}" >&2
+        echo "$DEFAULT_VERSION"
+    else
+        echo -e "${GREEN}找到最新版本: ${latest_version}${NC}" >&2
+        echo "$latest_version"
+    fi
+}
 
 # 检测是否为交互式终端
 is_interactive() {
@@ -99,7 +131,7 @@ download_tool() {
     local target="${arch}-${os_suffix}"
     local binary_name="${tool}-${version}-${target}"
     
-    # 修正下载 URL 格式：使用 zip-v0.1.0 格式的 tag
+    # 构建下载 URL 和 tag 名称
     local tag_name=""
     case "$tool" in
         "ziper") tag_name="zip-v${version}" ;;
@@ -132,7 +164,12 @@ download_tool() {
     mv "$temp_file" "$download_path"
     chmod +x "$download_path"
     
-    # 创建或更新符号链接
+    # 删除旧的符号链接（如果存在）
+    if [ -L "${BIN_DIR}/${tool}" ]; then
+        rm -f "${BIN_DIR}/${tool}"
+    fi
+    
+    # 创建新的符号链接
     ln -sf "$download_path" "${BIN_DIR}/${tool}"
     
     # 验证安装
@@ -170,22 +207,33 @@ install_tool() {
     local arch=$(detect_arch)
     local os_suffix=$(detect_os)
     
+    # 获取最新版本
+    local version=$(get_latest_version "$tool")
+    
     # 创建必要的目录
     mkdir -p "$BIN_DIR"
     
     # 下载并安装工具
-    download_tool "$tool" "$VERSION" "$arch" "$os_suffix"
-    echo -e "${GREEN}${tool} 安装成功！${NC}"
+    download_tool "$tool" "$version" "$arch" "$os_suffix"
+    echo -e "${GREEN}${tool} ${version} 安装成功！${NC}"
 }
 
 # 卸载工具
 uninstall_tool() {
     local tool=$1
-    local tool_path="${BIN_DIR}/${tool}"
-    local version_path="${BIN_DIR}/${tool}-${VERSION}"
     
-    if [ -f "$tool_path" ] || [ -f "$version_path" ]; then
-        rm -f "$tool_path" "$version_path"
+    # 查找工具的所有版本
+    local tool_paths=("${BIN_DIR}/${tool}" "${BIN_DIR}/${tool}-"*)
+    
+    local found=false
+    for path in "${tool_paths[@]}"; do
+        if [ -f "$path" ] || [ -L "$path" ]; then
+            rm -f "$path"
+            found=true
+        fi
+    done
+    
+    if [ "$found" = true ]; then
         echo -e "${GREEN}${tool} 卸载成功！${NC}"
     else
         echo -e "${YELLOW}${tool} 未安装${NC}"
@@ -336,8 +384,11 @@ main() {
 }
 
 # 如果脚本是通过管道执行的，则传递所有参数给main函数
-if ! is_interactive; then
-    main "$@"
-else
-    main
+# 或者如果脚本是直接执行的（不是被source的）
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    if ! is_interactive; then
+        main "$@"
+    else
+        main
+    fi
 fi

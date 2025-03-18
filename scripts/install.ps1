@@ -1,8 +1,13 @@
 # 版本信息
-$Version = "0.1.0"
+$DefaultVersion = "0.1.0"
 $RepoUrl = "https://github.com/jwyGithub/development-tools"
 $InstallDir = "$env:USERPROFILE\.development-tools"
 $Tools = @("ziper", "giter")
+
+# 检测是否为交互式终端
+function Test-Interactive {
+    return [Environment]::UserInteractive -and ($Host.Name -eq 'ConsoleHost' -or $Host.Name -eq 'Windows PowerShell ISE Host')
+}
 
 # 检测系统架构
 function Get-SystemArch {
@@ -13,6 +18,38 @@ function Get-SystemArch {
         return "x86_64"
     }
     throw "不支持的系统架构"
+}
+
+# 获取最新版本
+function Get-LatestVersion {
+    param (
+        [string]$Tool
+    )
+    
+    $TagPrefix = switch ($Tool) {
+        "ziper" { "zip-v" }
+        "giter" { "git-v" }
+        default { throw "未知的工具: $Tool" }
+    }
+    
+    Write-Host "正在获取 $Tool 的最新版本..." -ForegroundColor Blue
+    
+    try {
+        $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/jwyGithub/development-tools/releases" -ErrorAction Stop
+        $LatestRelease = $Releases | Where-Object { $_.tag_name -like "$TagPrefix*" } | Select-Object -First 1
+        
+        if ($LatestRelease) {
+            $Version = $LatestRelease.tag_name -replace "^$TagPrefix", ""
+            Write-Host "找到最新版本: $Version" -ForegroundColor Green
+            return $Version
+        }
+    }
+    catch {
+        Write-Host "无法获取最新版本: $_" -ForegroundColor Yellow
+    }
+    
+    Write-Host "无法获取最新版本，使用默认版本 $DefaultVersion" -ForegroundColor Yellow
+    return $DefaultVersion
 }
 
 # 下载工具
@@ -73,6 +110,7 @@ function Install-DevTool {
     }
     
     $Arch = Get-SystemArch
+    $Version = Get-LatestVersion -Tool $Tool
     Download-Tool -Tool $Tool -Version $Version -Arch $Arch
     Set-ToolPath
     Write-Host "$Tool 安装成功！" -ForegroundColor Green
@@ -103,6 +141,42 @@ function Update-DevTool {
     Write-Host "升级 $Tool..." -ForegroundColor Blue
     Uninstall-DevTool -Tool $Tool
     Install-DevTool -Tool $Tool
+}
+
+# 安装所有工具
+function Install-AllTools {
+    Write-Host "正在安装所有工具..." -ForegroundColor Blue
+    foreach ($tool in $Tools) {
+        Install-DevTool -Tool $tool
+    }
+    Write-Host "所有工具安装完成！" -ForegroundColor Green
+}
+
+# 安装指定工具
+function Install-SpecificTools {
+    param (
+        [string[]]$ToolsToInstall
+    )
+    
+    if ($ToolsToInstall.Count -eq 0) {
+        Write-Host "错误：未指定要安装的工具" -ForegroundColor Red
+        Write-Host "可用的工具: $($Tools -join ', ')" -ForegroundColor Yellow
+        exit 1
+    }
+    
+    Write-Host "正在安装指定的工具..." -ForegroundColor Blue
+    foreach ($tool in $ToolsToInstall) {
+        if ($Tools -contains $tool) {
+            Install-DevTool -Tool $tool
+        }
+        else {
+            Write-Host "错误：不支持的工具 '$tool'" -ForegroundColor Red
+            Write-Host "可用的工具: $($Tools -join ', ')" -ForegroundColor Yellow
+            exit 1
+        }
+    }
+    
+    Write-Host "指定的工具安装完成！" -ForegroundColor Green
 }
 
 # 显示菜单
@@ -183,11 +257,30 @@ function Show-Menu {
 
 # 主程序
 function Main {
-    while ($true) {
-        Show-Menu
-        Write-Host
+    param (
+        [string[]]$Args
+    )
+    
+    # 检查是否为交互式终端
+    if (Test-Interactive) {
+        # 交互式模式
+        while ($true) {
+            Show-Menu
+            Write-Host
+        }
+    }
+    else {
+        # 非交互式模式（通过管道执行）
+        # 检查是否有命令行参数
+        if ($Args.Count -gt 0) {
+            Install-SpecificTools -ToolsToInstall $Args
+        }
+        else {
+            # 安装所有工具
+            Install-AllTools
+        }
     }
 }
 
-# 运行主程序
-Main
+# 执行主程序
+Main $args
