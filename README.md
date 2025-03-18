@@ -30,7 +30,7 @@
 
 ## 安装方法
 
-### 使用安装脚本
+### Linux 和 macOS 安装
 
 我们提供了一个便捷的安装脚本，有两种使用方式：
 
@@ -65,15 +65,50 @@ cd development-tools
 bash scripts/install.sh
 ```
 
-安装脚本提供以下功能：
+### Windows 安装
+
+我们为 Windows 用户提供了 PowerShell 安装脚本，同样支持两种安装方式：
+
+#### 方式一：通过管道执行脚本
+
+使用 PowerShell 执行以下命令，可自动安装工具：
+
+```powershell
+# 安装所有工具
+iwr -useb https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.ps1 | pwsh -Command -
+
+# 安装特定工具（例如只安装 ziper）
+iwr -useb https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.ps1 | pwsh -Command - ziper
+
+# 安装多个工具
+iwr -useb https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.ps1 | pwsh -Command - ziper giter
+```
+
+#### 方式二：交互式安装
+
+下载脚本后交互式选择要安装的工具：
+
+```powershell
+# 下载并执行脚本
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/jwyGithub/development-tools/refs/heads/main/scripts/install.ps1 -OutFile install.ps1
+.\install.ps1
+
+# 或者直接克隆仓库并执行脚本
+git clone https://github.com/jwyGithub/development-tools.git
+cd development-tools
+.\scripts\install.ps1
+```
+
+安装脚本特性：
 - 自动检测系统架构和操作系统
+- 自动获取最新版本
 - 下载适合你系统的二进制文件
 - 配置环境变量
 - 支持安装、升级和卸载工具
 
 ### 从预编译二进制文件安装
 
-1. 访问 [Releases](https://github.com/yourusername/development-tools/releases) 页面
+1. 访问 [Releases](https://github.com/jwyGithub/development-tools/releases) 页面
 2. 下载适合你操作系统和架构的二进制文件
 3. 将下载的文件放置在系统 PATH 环境变量包含的目录中
 
@@ -83,7 +118,7 @@ bash scripts/install.sh
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/development-tools.git
+git clone https://github.com/jwyGithub/development-tools.git
 cd development-tools
 
 # 构建 Giter
