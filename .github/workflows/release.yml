@@ -78,8 +78,14 @@ jobs:
                   # 设置输出文件名
                   OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
 
-                  # 使用 cross 构建
-                  cross build --target ${{ matrix.target }} --release --features vendored-openssl
+                  # 根据项目决定是否使用 vendored-openssl 特性
+                  if [[ "$PROJECT" == "git" ]]; then
+                    echo "为 git 项目使用 vendored-openssl 特性..."
+                    cross build --target ${{ matrix.target }} --release --features vendored-openssl
+                  else
+                    echo "为 $PROJECT 项目构建（不使用特殊特性）..."
+                    cross build --target ${{ matrix.target }} --release
+                  fi
 
                   # 复制构建产物
                   cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "$OUTPUT_NAME"
@@ -126,8 +132,14 @@ jobs:
                   # 设置输出文件名
                   OUTPUT_NAME="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.exe"
 
-                  # 原生构建
-                  cargo build --target ${{ matrix.target }} --release --features vendored-openssl
+                  # 根据项目决定是否使用 vendored-openssl 特性
+                  if [[ "$PROJECT" == "git" ]]; then
+                    echo "为 git 项目使用 vendored-openssl 特性..."
+                    cargo build --target ${{ matrix.target }} --release --features vendored-openssl
+                  else
+                    echo "为 $PROJECT 项目构建（不使用特殊特性）..."
+                    cargo build --target ${{ matrix.target }} --release
+                  fi
 
                   # 复制构建产物
                   cp "target/${{ matrix.target }}/release/${BINARY_NAME}.exe" "$OUTPUT_NAME"
@@ -203,14 +215,28 @@ jobs:
                   # 根据目标架构选择正确的构建命令
                   if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
                     # 在 macOS 上构建 x86_64 目标
-                    echo "构建 x86_64 目标，使用 vendored-openssl 特性..."
+                    echo "构建 x86_64 目标..."
                     
-                    # 使用 vendored-openssl 特性
-                    cargo build --target ${{ matrix.target }} --release -vv --features vendored-openssl
+                    # 根据项目决定是否使用 vendored-openssl 特性
+                    if [[ "$PROJECT" == "git" ]]; then
+                      echo "为 git 项目使用 vendored-openssl 特性..."
+                      cargo build --target ${{ matrix.target }} --release -vv --features vendored-openssl
+                    else
+                      echo "为 $PROJECT 项目构建（不使用特殊特性）..."
+                      cargo build --target ${{ matrix.target }} --release -vv
+                    fi
                   else
                     # 原生构建 ARM64 目标
-                    echo "构建 ARM64 目标，使用 vendored-openssl 特性..."
-                    cargo build --target ${{ matrix.target }} --release --features vendored-openssl
+                    echo "构建 ARM64 目标..."
+                    
+                    # 根据项目决定是否使用 vendored-openssl 特性
+                    if [[ "$PROJECT" == "git" ]]; then
+                      echo "为 git 项目使用 vendored-openssl 特性..."
+                      cargo build --target ${{ matrix.target }} --release --features vendored-openssl
+                    else
+                      echo "为 $PROJECT 项目构建（不使用特殊特性）..."
+                      cargo build --target ${{ matrix.target }} --release
+                    fi
                   fi
 
                   # 复制构建产物

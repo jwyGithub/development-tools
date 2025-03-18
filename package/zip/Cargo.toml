@@ -16,6 +16,11 @@ walkdir = "2.4.0"                                   # Directory traversal
 glob = "0.3.1"                                      # Glob pattern matching
 path-clean = "1.0.1"                                # Path normalization
 
+[features]
+# 空的 vendored-openssl 特性，用于与 GitHub Actions 工作流兼容
+# 这个特性实际上不做任何事情，只是为了避免构建错误
+vendored-openssl = []
+
 [dev-dependencies]
 assert_fs = "1.1.1"                                 # File system assertions for tests
 predicates = "3.1.0"                                # Test predicates
