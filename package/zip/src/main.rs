@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use glob::Pattern;
 use log::{error, info, warn, LevelFilter};
 use path_clean::clean;
@@ -9,53 +9,79 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use zip::write::{ExtendedFileOptions, FileOptions};
 
-/// 快速的文件压缩工具 (A fast compression tool)
+/// 快速的文件压缩工具
+///
+/// 一个简单易用的ZIP压缩工具，用于将文件或目录压缩为ZIP格式。
+/// 支持指定输出文件名和路径，忽略特定文件或目录，以及不同的输出详细级别。
 #[derive(Parser)]
-#[command(author, version, about = "快速的文件压缩工具 (A fast compression tool)", long_about = None)]
-#[command(help_template = "{about-section}
-用法 (Usage): {usage}
+#[command(author, version, about, long_about = None)]
+#[command(after_help = "示例:
 
-参数 (Arguments):
-{positionals}
+```
+# 基本用法：压缩目录为 [目录名].zip
+ziper dist
 
-选项 (Options):
-{options}
+# 指定输出文件
+ziper dist output.zip
 
-示例 (Examples):
-    # 基本用法：压缩目录为 [目录名].zip (Basic usage: compress directory to [dirname].zip)
-    {bin} dist
+# 指定输出目录和文件名
+ziper dist path/to/output.zip
 
-    # 指定输出文件 (Specify output file)
-    {bin} dist output.zip
+# 忽略特定模式
+ziper dist --ignore \"node_modules,.git,*.zip\"
 
-    # 指定输出目录和文件名 (Specify output directory and filename)
-    {bin} dist path/to/output.zip
+# 使用静默模式
+ziper dist -q
 
-    # 忽略特定模式 (Ignore specific patterns)
-    {bin} dist --ignore \"node_modules,.git,*.zip\"")]
+# 使用详细模式
+ziper dist -v
+```")]
 struct Cli {
-    /// 要压缩的源文件或目录 (Source directory or file to compress)
-    #[arg(default_value = None)]
+    /// 要压缩的源文件或目录
+    ///
+    /// 指定需要被压缩的文件或目录的路径。
+    /// 如果是目录，将递归压缩其中的所有内容。
     source: Option<String>,
 
-    /// 输出的zip文件路径（可选，默认为源名称加.zip后缀）
-    /// (Output zip file path - optional, defaults to source name with .zip extension)
-    #[arg(default_value = None)]
+    /// 输出的zip文件路径
+    ///
+    /// 指定生成的ZIP文件的路径和名称。
+    /// 如果不提供，默认使用源名称加.zip后缀。
     output: Option<String>,
 
-    /// 要忽略的模式，使用逗号分隔（例如："node_modules,.git,*.zip"）
-    /// (Patterns to ignore, comma-separated - e.g., "node_modules,.git,*.zip")
-    #[arg(short = 'i', long = "ignore", value_delimiter = ',')]
+    /// 要忽略的模式，使用逗号分隔
+    ///
+    /// 指定在压缩过程中要忽略的文件或目录模式。
+    /// 支持glob模式，多个模式用逗号分隔。
+    /// 例如："node_modules,.git,*.zip"
+    #[arg(
+        short = 'i',
+        long = "ignore",
+        value_delimiter = ',',
+        help_heading = "过滤选项"
+    )]
     ignore_patterns: Option<Vec<String>>,
 
     /// 静默模式 - 不显示输出
-    /// (Quiet mode - suppress output)
-    #[arg(short = 'q', long = "quiet")]
+    ///
+    /// 在压缩过程中不显示任何进度信息，除非发生错误。
+    #[arg(
+        short = 'q',
+        long = "quiet",
+        conflicts_with = "verbose",
+        help_heading = "输出控制"
+    )]
     quiet: bool,
 
     /// 详细模式 - 显示详细输出
-    /// (Verbose mode - show detailed output)
-    #[arg(short = 'v', long = "verbose")]
+    ///
+    /// 在压缩过程中显示详细的进度信息，包括每个被处理的文件。
+    #[arg(
+        short = 'v',
+        long = "verbose",
+        conflicts_with = "quiet",
+        help_heading = "输出控制"
+    )]
     verbose: bool,
 }
 
@@ -179,9 +205,8 @@ fn main() -> Result<()> {
 
     // 如果没有提供源路径，显示帮助信息
     if cli.source.is_none() {
-        Cli::command().print_help().unwrap_or_else(|e| {
-            eprintln!("Error printing help: {}", e);
-        });
+        eprintln!("错误: 必须提供源文件或目录路径");
+        eprintln!("使用 --help 查看帮助信息");
         return Ok(());
     }
 
